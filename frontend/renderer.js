@@ -22,7 +22,11 @@ function refreshSearchResults() {
   $("#clearSearch").classList.toggle("hidden", !query);
   if (!query) { $("#searchResults").classList.add("hidden"); $("#searchResults").innerHTML = ""; return; }
   const searchNotes = (state.settings.searchScope || "all") === "all";
-  const matches = state.reminders.filter((item) => item.title.toLocaleLowerCase().includes(query) || (searchNotes && (item.note || "").toLocaleLowerCase().includes(query))).slice(0, 30);
+  const preferredStatus = currentView === "done" ? "done" : "pending";
+  const matches = state.reminders
+    .filter((item) => item.title.toLocaleLowerCase().includes(query) || (searchNotes && (item.note || "").toLocaleLowerCase().includes(query)))
+    .sort((a, b) => Number(b.status === preferredStatus) - Number(a.status === preferredStatus))
+    .slice(0, 30);
   $("#searchResults").innerHTML = matches.length ? matches.map((item) => `<button class="search-result" data-search-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.note || formatDue(item.dueAt))}</small><em>${item.status === "done" ? "已完成" : "待提醒"}</em></button>`).join("") : '<div class="search-empty">没有找到相关提醒</div>';
   $("#searchResults").classList.remove("hidden");
 }

@@ -2,7 +2,7 @@
 
 一个完全本地运行的 Windows 桌面提醒程序，使用 Tauri、Rust 和 Windows WebView2 构建。
 
-当前版本：`2.1.0`
+当前版本：`2.1.1`
 
 ## 功能
 
