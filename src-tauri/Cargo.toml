@@ -1,0 +1,26 @@
+[package]
+name = "jishi-reminder"
+version = "2.1.0"
+description = "及时提醒 Windows 本地桌面版"
+authors = ["Jishi"]
+edition = "2021"
+
+[lib]
+name = "jishi_reminder_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
+
+[profile.release]
+panic = "abort"
+strip = true

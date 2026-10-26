@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+  <title>提醒</title>
+  <link rel="stylesheet" href="design-tokens.css" />
+  <link rel="stylesheet" href="popup.css" />
+  <link rel="stylesheet" href="popup-overrides.css" />
+  <link rel="stylesheet" href="popup-material.css" />
+</head>
+<body>
+  <main class="popup">
+    <div id="dragHandle" class="top"><img class="logo" src="assets/app-icon.svg" alt="" width="24" height="24" /><strong>及时提醒</strong><span class="now">现在</span><button id="closeButton" aria-label="暂时关闭提醒，1分钟后再次提醒" title="暂时关闭，1分钟后再次提醒">×</button></div>
+    <div id="previewCountdown" class="preview-countdown hidden"><span></span><em id="previewCountdownText"></em></div>
+    <section id="viewPanel">
+      <h1 id="title"></h1><p id="note"></p>
+      <div class="actions"><button id="completeButton" class="primary">✓ 完成</button><button id="laterButton" title="选择延后提醒的时间">未完成</button></div>
+      <button id="editButton" class="link">添加备注或修改提醒事项</button>
+      <small class="repeat-note">直接关闭后，1 分钟后会再次提醒</small>
+    </section>
+    <section id="snoozePanel" class="hidden">
+      <h2>选择下次提醒时间</h2>
+      <button id="defaultButton" class="primary wide"></button>
+      <div class="actions small top-actions"><button id="snoozeBack">返回</button><button id="customButton" class="dark">确认这个时间</button></div>
+      <label>自定义时间<input id="customTime" type="datetime-local" /></label>
+      <button id="disableButton" class="no-more">无需再提醒</button>
+    </section>
+    <section id="editPanel" class="hidden">
+      <h2>修改提醒</h2>
+      <label>提醒事项<input id="editTitle" maxlength="120" /></label>
+      <label>备注<textarea id="editNote" maxlength="500"></textarea></label>
+      <div class="actions small"><button id="editBack">取消</button><button id="saveEdit" class="dark">保存更改</button></div>
+    </section>
+  </main>
+  <script src="tauri-bridge.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

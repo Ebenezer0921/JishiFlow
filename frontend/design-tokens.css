@@ -1,0 +1,35 @@
+/* Project-specific desktop values inspired by Material Design 3 roles. */
+:root {
+  --md-primary: #245ea8;
+  --md-on-primary: #fff;
+  --md-primary-container: #dce8fa;
+  --md-on-primary-container: #153f72;
+  --md-surface: #f8fafd;
+  --md-surface-container: #edf1f7;
+  --md-surface-lowest: #fff;
+  --md-on-surface: #1b1c20;
+  --md-on-surface-variant: #526071;
+  --md-outline: #8593a6;
+  --md-outline-variant: #dce2eb;
+  --md-error: #b3261e;
+  --md-success: #24613b;
+  --md-font: "Microsoft YaHei", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  --md-title-large: 28px;
+  --md-title-medium: 20px;
+  --md-body-large: 16px;
+  --md-body-medium: 14px;
+  --md-label: 13px;
+  --md-space-1: 4px;
+  --md-space-2: 8px;
+  --md-space-3: 12px;
+  --md-space-4: 16px;
+  --md-space-6: 24px;
+  --md-space-8: 32px;
+  --md-radius-small: 8px;
+  --md-radius-control: 12px;
+  --md-radius-surface: 16px;
+  --md-border: 1px solid var(--md-outline-variant);
+  --md-shadow-overlay: 0 8px 24px rgb(27 28 32 / 12%);
+  --md-focus: 2px solid var(--md-primary);
+  --md-focus-offset: 3px;
+}

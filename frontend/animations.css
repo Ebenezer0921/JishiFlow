@@ -1,0 +1,26 @@
+.reminder-row.completing {
+  pointer-events: none;
+  animation: completed-row 520ms cubic-bezier(.2,.8,.2,1) forwards;
+}
+
+.reminder-row.completing .check-button {
+  border-color: #30b95c;
+  background: #30b95c;
+  color: white;
+  animation: completed-check 420ms cubic-bezier(.2,1.45,.35,1) both;
+}
+
+@keyframes completed-check {
+  0% { transform: scale(.7); opacity: .35; }
+  55% { transform: scale(1.22); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes completed-row {
+  0%, 68% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(22px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reminder-row.completing, .reminder-row.completing .check-button { animation-duration: 1ms; }
+}

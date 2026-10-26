@@ -1,0 +1,131 @@
+/* Stage 2: shared desktop dialogs. Independent reminder windows do not load this file. */
+body.has-open-dialog { overflow: hidden; }
+.dialog-overlay {
+  padding: var(--md-space-6);
+  background: rgb(27 28 32 / 24%);
+  backdrop-filter: blur(4px);
+}
+.dialog-overlay .apple-dialog {
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
+  min-height: 0;
+  padding: var(--md-space-6);
+  gap: var(--md-space-6);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border: var(--md-border);
+  border-radius: 20px;
+  background: var(--md-surface-lowest);
+  color: var(--md-on-surface);
+  box-shadow: var(--md-shadow-overlay);
+  font-family: var(--md-font);
+}
+.dialog-overlay .dialog-top { gap: var(--md-space-4); }
+.dialog-overlay .dialog-top h2 { margin: 0; font-size: 24px; line-height: 32px; letter-spacing: 0; }
+.dialog-overlay .dialog-top p { margin-top: var(--md-space-2); color: var(--md-on-surface-variant); font-size: var(--md-body-medium); line-height: 22px; }
+.dialog-overlay .dialog-close { flex-shrink: 0; width: 36px; height: 36px; border-radius: var(--md-radius-control); color: var(--md-on-surface-variant); background: var(--md-surface-container); }
+.dialog-overlay button { font-family: inherit; }
+.dialog-overlay button:focus-visible,
+.dialog-overlay input:focus-visible,
+.dialog-overlay textarea:focus-visible,
+.dialog-overlay select:focus-visible { outline: var(--md-focus); outline-offset: var(--md-focus-offset); }
+.dialog-overlay .reminder-form { gap: var(--md-space-4); }
+.dialog-overlay .reminder-form label, .dialog-overlay .batch-input-area label { gap: var(--md-space-2); color: var(--md-on-surface); font-size: var(--md-body-medium); font-weight: 600; line-height: 22px; }
+.dialog-overlay .field-optional { margin-left: var(--md-space-2); color: var(--md-on-surface-variant); font-size: var(--md-label); font-weight: 400; }
+.dialog-overlay .reminder-form input,
+.dialog-overlay .reminder-form textarea,
+.dialog-overlay #batchInput,
+.dialog-overlay .setting-select { border: 1px solid var(--md-outline); border-radius: var(--md-radius-control); background: var(--md-surface-lowest); color: var(--md-on-surface); font-size: var(--md-body-medium); font-weight: 400; }
+.dialog-overlay input::placeholder, .dialog-overlay textarea::placeholder { color: var(--md-on-surface-variant); opacity: 1; }
+.dialog-overlay .reminder-form input { height: 44px; padding-inline: var(--md-space-3); }
+.dialog-overlay .reminder-form textarea { min-height: 104px; padding: var(--md-space-3); line-height: 22px; }
+.dialog-overlay .form-actions { display: flex; align-items: center; gap: var(--md-space-2); }
+.dialog-overlay .form-actions > span { display: none; }
+.dialog-overlay .form-actions .cancel-button { margin-left: auto; }
+.dialog-overlay .form-actions button,
+.dialog-overlay .batch-footer button { min-width: 88px; height: 44px; padding-inline: var(--md-space-4); border-radius: var(--md-radius-control); font-size: var(--md-body-medium); font-weight: 600; }
+.dialog-overlay .save-button { border: 0; background: var(--md-primary); color: var(--md-on-primary); }
+.dialog-overlay .save-button:hover:not(:disabled) { background: var(--md-on-primary-container); }
+.dialog-overlay .cancel-button { border: 1px solid var(--md-outline); background: var(--md-surface-lowest); color: var(--md-primary); }
+.dialog-overlay .cancel-button:hover { background: var(--md-primary-container); }
+.dialog-overlay .delete-button { padding-inline: var(--md-space-3) !important; background: transparent; color: var(--md-error); }
+.dialog-overlay .delete-button:hover { background: #fce8e6; }
+.dialog-overlay .save-button:disabled { background: var(--md-surface-container); color: var(--md-on-surface-variant); opacity: 1; cursor: not-allowed; }
+
+.dialog-overlay .settings-dialog { width: min(680px, calc(100vw - 48px)); }
+.dialog-overlay .settings-dialog .dialog-top { position: sticky; top: -24px; z-index: 3; margin: -24px -24px 0; padding: var(--md-space-6); border-bottom: var(--md-border); background: var(--md-surface-lowest); }
+.dialog-overlay .settings-group { overflow: visible; border-radius: 0; background: transparent; box-shadow: none; }
+.dialog-overlay .settings-section-title { margin: var(--md-space-6) 0 0; padding: var(--md-space-3) var(--md-space-4); border-radius: var(--md-radius-small); background: var(--md-surface-container); color: var(--md-primary); font-size: var(--md-body-medium); line-height: 22px; }
+.dialog-overlay .settings-section-title:first-child { margin-top: 0; }
+.dialog-overlay .setting-row { min-height: 80px; padding: var(--md-space-4); gap: var(--md-space-6); }
+.dialog-overlay .setting-row + .setting-row { border-top: var(--md-border); }
+.dialog-overlay .setting-row > div:first-child { min-width: 0; gap: var(--md-space-1); }
+.dialog-overlay .setting-row strong, .dialog-overlay .position-setting strong { font-size: var(--md-body-medium); line-height: 22px; }
+.dialog-overlay .setting-row small, .dialog-overlay .position-setting small { color: var(--md-on-surface-variant); font-size: var(--md-label); line-height: 20px; }
+.dialog-overlay .minute-stepper { height: 40px; flex-shrink: 0; padding-inline: var(--md-space-3); border-radius: var(--md-radius-control); border: var(--md-border); background: var(--md-surface); color: var(--md-on-surface-variant); font-size: var(--md-label); }
+.dialog-overlay .minute-stepper input { color: var(--md-on-surface); font-size: var(--md-body-medium); }
+.dialog-overlay .minute-stepper:focus-within { outline: var(--md-focus); outline-offset: var(--md-focus-offset); }
+.dialog-overlay .minute-stepper input:focus-visible { outline: none; }
+.dialog-overlay .setting-select { min-width: 168px; height: 40px; padding-left: var(--md-space-3); }
+.dialog-overlay .five-step-slider { width: 220px; flex-shrink: 0; color: var(--md-on-surface-variant); font-size: var(--md-label); }
+.dialog-overlay input[type="range"], .dialog-overlay input[type="checkbox"] { accent-color: var(--md-primary); }
+.dialog-overlay .position-setting { padding: var(--md-space-4); gap: var(--md-space-3); border-top: var(--md-border); }
+.dialog-overlay .position-grid { padding: var(--md-space-3); gap: var(--md-space-2); border: var(--md-border); background: var(--md-surface); }
+.dialog-overlay .position-grid button { height: 36px; border: 1px solid var(--md-outline); border-radius: var(--md-radius-small); background: var(--md-surface-lowest); }
+.dialog-overlay .position-grid button.active { border-color: var(--md-primary); background: var(--md-primary-container); box-shadow: none; }
+.dialog-overlay .position-grid button.active::after { content: "✓"; color: var(--md-on-primary-container); }
+.dialog-overlay .position-name { color: var(--md-on-surface-variant); font-size: var(--md-label); }
+.dialog-overlay .setting-button { min-width: 64px; height: 40px; padding-inline: var(--md-space-3); border: 1px solid var(--md-outline); border-radius: var(--md-radius-control); background: var(--md-surface-lowest); color: var(--md-primary); font-size: var(--md-body-medium); }
+.dialog-overlay .setting-button:hover { background: var(--md-primary-container); }
+.dialog-overlay .transfer-status { color: var(--md-on-surface-variant); font-size: var(--md-label); line-height: 20px; }
+.dialog-overlay .transfer-status.error { color: var(--md-error); }
+.dialog-overlay .settings-footnote { margin: 0; color: var(--md-on-surface-variant); font-size: var(--md-label); line-height: 20px; }
+
+.dialog-overlay .batch-dialog { width: min(960px, calc(100vw - 48px)); }
+.dialog-overlay .batch-layout { grid-template-columns: minmax(0, 1.6fr) minmax(240px, 1fr); gap: var(--md-space-4); }
+.dialog-overlay #batchInput { min-height: 200px; padding: var(--md-space-3); font-family: var(--md-font); line-height: 24px; }
+.dialog-overlay .batch-hint, .dialog-overlay .preview-heading span { color: var(--md-on-surface-variant); font-size: var(--md-label); line-height: 20px; }
+.dialog-overlay .format-help { display: block; padding: var(--md-space-4); border-radius: var(--md-radius-control); background: var(--md-surface-container); color: var(--md-on-surface); }
+.dialog-overlay .format-help ul { color: var(--md-on-surface-variant); font-size: var(--md-label); }
+.dialog-overlay .format-help code { color: var(--md-primary); font-size: var(--md-label); }
+.dialog-overlay .format-help pre { color: var(--md-on-surface-variant); font-size: 12px; line-height: 20px; }
+.dialog-overlay .preview-heading strong { font-size: var(--md-body-medium); }
+.dialog-overlay .batch-preview { border: var(--md-border); border-radius: var(--md-radius-control); }
+.dialog-overlay .preview-empty, .dialog-overlay .preview-copy small, .dialog-overlay .preview-time { color: var(--md-on-surface-variant); font-size: var(--md-label); }
+.dialog-overlay .preview-row { padding: var(--md-space-3); }
+.dialog-overlay .preview-copy strong { font-size: var(--md-body-medium); }
+.dialog-overlay .preview-row.error .preview-copy strong { color: var(--md-error); }
+.dialog-overlay .past-confirm { line-height: 20px; }
+.dialog-overlay .batch-footer { position: sticky; bottom: -24px; z-index: 2; gap: var(--md-space-2); padding-block: var(--md-space-3); margin-bottom: -12px; border-top: var(--md-border); background: var(--md-surface-lowest); }
+@media (max-width: 780px) {
+  .dialog-overlay { padding: var(--md-space-4); place-items: center; }
+  .dialog-overlay .apple-dialog { width: min(100%, 680px); max-height: calc(100dvh - 32px); padding: var(--md-space-4); }
+  .dialog-overlay .settings-dialog .dialog-top { top: -16px; margin: -16px -16px 0; padding: var(--md-space-4); }
+  .dialog-overlay .batch-footer { bottom: -16px; }
+  .dialog-overlay .batch-layout { grid-template-columns: minmax(0, 1fr); }
+  .dialog-overlay .format-help { display: block; }
+  .dialog-overlay .format-help pre { display: none; }
+  .dialog-overlay .setting-row { padding-inline: var(--md-space-2); gap: var(--md-space-3); }
+}
+@media (max-width: 560px) {
+  .dialog-overlay .setting-row { flex-wrap: wrap; }
+  .dialog-overlay .setting-row > div:first-child { flex-basis: 100%; }
+  .dialog-overlay .five-step-slider { width: 100%; }
+  .dialog-overlay .preview-row { grid-template-columns: 26px minmax(0, 1fr); }
+  .dialog-overlay .preview-time { grid-column: 2; }
+}
+
+/* Keep the scroll track inside the rounded dialog, separate from its header. */
+.dialog-overlay .settings-dialog { display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; scrollbar-gutter: auto; }
+.dialog-overlay .settings-dialog .dialog-top { position: relative; top: auto; flex-shrink: 0; margin: 0; padding: 24px; }
+.dialog-overlay .settings-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 24px; scrollbar-width: thin; scrollbar-color: var(--md-outline) transparent; }
+.dialog-overlay .settings-scroll::-webkit-scrollbar { width: 8px; }
+.dialog-overlay .settings-scroll::-webkit-scrollbar-track { background: transparent; margin-block: 12px; }
+.dialog-overlay .settings-scroll::-webkit-scrollbar-thumb { background: var(--md-outline); border: 2px solid white; border-radius: 8px; }
+.dialog-overlay .settings-scroll::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.dialog-overlay .settings-scroll .settings-footnote { margin-top: 20px; }
+@media (max-width: 780px) {
+  .dialog-overlay .settings-dialog { padding: 0; }
+  .dialog-overlay .settings-dialog .dialog-top, .dialog-overlay .settings-scroll { padding: 16px; }
+}
