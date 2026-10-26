@@ -40,6 +40,18 @@ body.has-open-dialog { overflow: hidden; }
 .dialog-overlay input::placeholder, .dialog-overlay textarea::placeholder { color: var(--md-on-surface-variant); opacity: 1; }
 .dialog-overlay .reminder-form input { height: 44px; padding-inline: var(--md-space-3); }
 .dialog-overlay .reminder-form textarea { min-height: 104px; padding: var(--md-space-3); line-height: 22px; }
+.dialog-overlay .image-attachment { display: grid; gap: var(--md-space-2); }
+.dialog-overlay .image-attachment-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--md-space-3); color: var(--md-on-surface); font-size: var(--md-body-medium); font-weight: 600; }
+.dialog-overlay .image-attachment-heading > small { color: var(--md-on-surface-variant); font-size: var(--md-label); font-weight: 400; }
+.dialog-overlay .image-drop-zone { min-height: 82px; padding: var(--md-space-3); display: grid; place-content: center; gap: var(--md-space-1); border: 1px dashed var(--md-outline); border-radius: var(--md-radius-control); background: var(--md-surface); color: var(--md-primary); cursor: pointer; text-align: center; }
+.dialog-overlay .image-drop-zone span { color: var(--md-on-surface-variant); font-size: var(--md-label); font-weight: 400; }
+.dialog-overlay .image-drop-zone:hover, .dialog-overlay .image-drop-zone.is-dragging { border-color: var(--md-primary); background: var(--md-primary-container); }
+.dialog-overlay .image-preview { padding: var(--md-space-2); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--md-space-3); border: var(--md-border); border-radius: var(--md-radius-control); background: var(--md-surface); }
+.dialog-overlay .image-preview img { width: 100%; max-height: 180px; display: block; border-radius: var(--md-radius-small); object-fit: contain; background: var(--md-surface-container); }
+.dialog-overlay .image-preview > div { display: grid; gap: var(--md-space-2); }
+.dialog-overlay .image-preview button { min-width: 84px; min-height: 38px; padding-inline: var(--md-space-3); border: 1px solid var(--md-outline); border-radius: var(--md-radius-control); background: var(--md-surface-lowest); color: var(--md-primary); cursor: pointer; }
+.dialog-overlay #removeImageButton { color: var(--md-error); }
+.dialog-overlay .image-status { min-height: 20px; color: var(--md-on-surface-variant); font-size: var(--md-label); line-height: 20px; }
 .dialog-overlay .form-actions { display: flex; align-items: center; gap: var(--md-space-2); }
 .dialog-overlay .form-actions > span { display: none; }
 .dialog-overlay .form-actions .cancel-button { margin-left: auto; }

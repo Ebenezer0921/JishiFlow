@@ -61,13 +61,14 @@
 .app-shell .segmented button:hover { background: var(--md-surface-container); }
 .app-shell .segmented button.active { background: var(--md-primary-container); color: var(--md-on-primary-container); box-shadow: none; text-decoration: underline; text-underline-offset: 5px; }
 .app-shell .reminder-panel { border: var(--md-border); border-radius: var(--md-radius-surface); box-shadow: none; background: var(--md-surface-lowest); }
-.app-shell .reminder-row { min-height: 80px; padding: var(--md-space-4); grid-template-columns: 40px minmax(0, 1fr) auto; gap: var(--md-space-3); }
+.app-shell .reminder-row { min-height: 80px; padding: var(--md-space-4); grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: var(--md-space-3); }
 .app-shell .reminder-row + .reminder-row { border-top: var(--md-border); }
 .app-shell .reminder-row:hover { background: var(--md-surface); }
 .app-shell .check-button { position: relative; isolation: isolate; width: 40px; height: 40px; border: 0; background: transparent; border-radius: 50%; }
 .app-shell .check-button::before { content: ""; position: absolute; inset: 8px; z-index: -1; border: 1.5px solid var(--md-outline); border-radius: 50%; }
 .app-shell .reminder-copy strong { color: var(--md-on-surface); font-size: var(--md-body-large); line-height: 24px; overflow-wrap: anywhere; }
 .app-shell .reminder-copy small, .app-shell .reminder-time { color: var(--md-on-surface-variant); font-size: var(--md-label); line-height: 20px; }
+.app-shell .reminder-thumbnail { width: 48px; height: 48px; display: block; border-radius: var(--md-radius-small); object-fit: cover; background: var(--md-surface-container); }
 .app-shell .is-done .check-button, .app-shell .reminder-row.completing .check-button { background: transparent; border-color: transparent; }
 .app-shell .is-done .check-button::before, .app-shell .reminder-row.completing .check-button::before { background: var(--md-success); border-color: var(--md-success); }
 .app-shell .is-done .reminder-copy strong { color: var(--md-on-surface-variant); }
@@ -90,8 +91,9 @@
   .app-shell .workspace, .app-shell .nav-inner { padding-inline: var(--md-space-4); }
   .app-shell .hero { padding-block: var(--md-space-6); }
   .app-shell .reminder-search { width: 100%; }
-  .app-shell .reminder-row { grid-template-columns: 40px minmax(0, 1fr); }
+  .app-shell .reminder-row { grid-template-columns: 40px minmax(0, 1fr) auto; }
   .app-shell .reminder-time { grid-column: 2; justify-self: start; }
+  .app-shell .reminder-thumbnail { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
 }
 @media (prefers-reduced-motion: reduce) {
   .app-shell .reminder-row.search-highlight { animation: none; }

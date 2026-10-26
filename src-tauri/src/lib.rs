@@ -34,6 +34,8 @@ struct Reminder {
     title: String,
     #[serde(default)]
     note: String,
+    #[serde(default)]
+    image_data: String,
     due_at: String,
     status: String,
     #[serde(default)]
@@ -118,6 +120,14 @@ fn sanitize(mut value: PersistedState) -> PersistedState {
     value.settings.preview_seconds = value.settings.preview_seconds.clamp(1, 30);
     if !VALID_POSITIONS.contains(&value.settings.popup_position.as_str()) {
         value.settings.popup_position = default_position();
+    }
+    for reminder in &mut value.reminders {
+        let valid_image = reminder.image_data.len() <= 1_200_000
+            && ["data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"]
+                .iter().any(|prefix| reminder.image_data.starts_with(prefix));
+        if !reminder.image_data.is_empty() && !valid_image {
+            reminder.image_data.clear();
+        }
     }
     value
 }
@@ -376,6 +386,7 @@ async fn popup_test(app: AppHandle) -> Result<(), String> {
     let reminder = Reminder {
         id: "__test__".into(), title: "这是一条测试提醒".into(),
         note: "提醒弹窗工作正常。你可以试试完成、未完成或修改备注。".into(),
+        image_data: String::new(),
         due_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true), status: "pending".into(), completed_at: None,
     };
     let handle = app.clone();
@@ -390,6 +401,7 @@ async fn popup_preview(app: AppHandle) -> Result<(), String> {
         id: format!("__preview__{}", Utc::now().timestamp_millis()),
         title: "提醒卡片预览".into(),
         note: "这里会展示当前设置的卡片大小、字体、文字大小和透明度。".into(),
+        image_data: String::new(),
         due_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
         status: "pending".into(),
         completed_at: None,
@@ -410,8 +422,32 @@ mod popup_layout_tests {
 
     fn fixture(anchor: &str, area: [i32; 4], slot: usize) -> ActivePopup {
         ActivePopup { reminder: Reminder { id: "layout-test".into(), title: "test".into(), note: String::new(),
+            image_data: String::new(),
             due_at: "2099-01-01T00:00:00Z".into(), status: "pending".into(), completed_at: None },
             slot, moved_by_user: false, anchor: anchor.into(), area, scale: 1.0, height: 260 }
+    }
+
+    #[test]
+    fn reminders_saved_before_image_support_still_load() {
+        let value: PersistedState = serde_json::from_str(r#"{
+            "reminders":[{"id":"old","title":"旧提醒","note":"","dueAt":"2099-01-01T00:00:00Z","status":"pending"}],
+            "settings":{}
+        }"#).unwrap();
+        assert_eq!(value.reminders[0].image_data, "");
+    }
+
+    #[test]
+    fn sanitize_keeps_supported_images_and_rejects_other_data_urls() {
+        let mut value = PersistedState::default();
+        value.reminders.push(Reminder { id: "safe".into(), title: "safe".into(), note: String::new(),
+            image_data: "data:image/webp;base64,AAAA".into(), due_at: "2099-01-01T00:00:00Z".into(),
+            status: "pending".into(), completed_at: None });
+        value.reminders.push(Reminder { id: "unsafe".into(), title: "unsafe".into(), note: String::new(),
+            image_data: "data:image/svg+xml;base64,AAAA".into(), due_at: "2099-01-01T00:00:00Z".into(),
+            status: "pending".into(), completed_at: None });
+        let safe = sanitize(value);
+        assert_eq!(safe.reminders[0].image_data, "data:image/webp;base64,AAAA");
+        assert!(safe.reminders[1].image_data.is_empty());
     }
 
     #[test]

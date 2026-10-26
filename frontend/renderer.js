@@ -2,6 +2,7 @@ let state = { reminders: [], settings: { defaultSnooze: 10, popupSize: 3, textSi
 let currentView = "pending";
 let editingId = null;
 let batchRows = [];
+let editorImageData = "";
 const reminderIcon = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>';
 const positionNames = { "top-left": "左上", "top-center": "顶部居中", "top-right": "右上", "center-left": "左侧居中", center: "屏幕中央", "center-right": "右侧居中", "bottom-left": "左下", "bottom-center": "底部居中", "bottom-right": "右下" };
 const sizeNames = ["", "很小", "较小", "标准", "较大", "很大"];
@@ -17,6 +18,48 @@ function formatDue(value) {
   return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
 }
 function escapeHtml(value) { return String(value || "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]); }
+function isSupportedImageData(value) { return typeof value === "string" && /^data:image\/(png|jpeg|webp);base64,/.test(value) && value.length <= 1200000; }
+function renderEditorImage() {
+  const hasImage = isSupportedImageData(editorImageData);
+  $("#imageDropZone").classList.toggle("hidden", hasImage);
+  $("#imagePreview").classList.toggle("hidden", !hasImage);
+  $("#imagePreviewContent").src = hasImage ? editorImageData : "";
+}
+async function encodeReminderImage(file) {
+  if (!file || !file.type.startsWith("image/")) throw new Error("请选择 PNG、JPG 或 WebP 图片");
+  if (file.size > 20 * 1024 * 1024) throw new Error("原图片不能超过 20 MB");
+  const bitmap = await createImageBitmap(file);
+  try {
+    const maxEdge = 1280;
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    for (const quality of [0.84, 0.72, 0.6, 0.48]) {
+      const encoded = canvas.toDataURL("image/webp", quality);
+      if (encoded.length <= 1150000) return encoded;
+    }
+    throw new Error("压缩后图片仍然过大，请换一张尺寸较小的图片");
+  } finally {
+    bitmap.close();
+  }
+}
+async function setEditorImage(file) {
+  const status = $("#imageStatus");
+  const saveButton = $("#reminderForm .save-button");
+  status.textContent = "正在处理图片…";
+  saveButton.disabled = true;
+  try {
+    editorImageData = await encodeReminderImage(file);
+    renderEditorImage();
+    status.textContent = "图片已添加，仅保存在本机并随备份导出";
+  } catch (error) {
+    status.textContent = error.message || "图片处理失败";
+  } finally {
+    saveButton.disabled = false;
+  }
+}
 function refreshSearchResults() {
   const query = $("#searchInput").value.trim().toLocaleLowerCase();
   $("#clearSearch").classList.toggle("hidden", !query);
@@ -96,7 +139,7 @@ function setTransferStatus(message, isError = false) {
   target.classList.toggle("error", isError);
 }
 function exportReminders() {
-  const payload = { format: "jishi-reminder", version: 1, exportedAt: new Date().toISOString(), reminders: state.reminders };
+  const payload = { format: "jishi-reminder", version: 2, exportedAt: new Date().toISOString(), reminders: state.reminders };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
   const link = document.createElement("a");
   const day = new Date().toISOString().slice(0, 10);
@@ -119,7 +162,7 @@ async function importReminders(file) {
     const incoming = valid.flatMap((item) => {
       if (item.id && existingIds.has(item.id)) { skipped += 1; return []; }
       const id = item.id || crypto.randomUUID(); existingIds.add(id);
-      return [{ id, title: item.title.trim(), note: typeof item.note === "string" ? item.note : "", dueAt: new Date(item.dueAt).toISOString(), status: item.status === "done" ? "done" : "pending", completedAt: item.completedAt || null }];
+      return [{ id, title: item.title.trim(), note: typeof item.note === "string" ? item.note : "", imageData: isSupportedImageData(item.imageData) ? item.imageData : "", dueAt: new Date(item.dueAt).toISOString(), status: item.status === "done" ? "done" : "pending", completedAt: item.completedAt || null }];
     });
     state.reminders.push(...incoming);
     await persist();
@@ -149,11 +192,12 @@ function render() {
   if (!items.length) {
     $("#reminderList").innerHTML = `<div class="empty-state"><span class="empty-bell">${reminderIcon}</span><strong>${currentView === "pending" ? "现在没有待提醒事项" : "还没有完成的事项"}</strong><span>${currentView === "pending" ? "可以放心去做眼前的事。" : "完成一个提醒后会出现在这里。"}</span></div>`; return;
   }
-  $("#reminderList").innerHTML = items.map((item) => `<div class="reminder-row ${item.status === "done" ? "is-done" : ""}" data-id="${item.id}"><button class="check-button" aria-label="${escapeHtml(item.status === "done" ? "重新启用提醒：" + item.title : "完成提醒：" + item.title)}" data-action="toggle">${item.status === "done" ? "✓" : ""}</button><button class="reminder-copy" data-action="edit"><strong>${escapeHtml(item.title)}</strong>${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}</button><button class="reminder-time" data-action="edit">${item.status === "done" ? "已完成" : formatDue(item.dueAt)} <span>›</span></button></div>`).join("");
+  $("#reminderList").innerHTML = items.map((item) => `<div class="reminder-row ${item.status === "done" ? "is-done" : ""}" data-id="${item.id}"><button class="check-button" aria-label="${escapeHtml(item.status === "done" ? "重新启用提醒：" + item.title : "完成提醒：" + item.title)}" data-action="toggle">${item.status === "done" ? "✓" : ""}</button><button class="reminder-copy" data-action="edit"><strong>${escapeHtml(item.title)}</strong>${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}</button>${isSupportedImageData(item.imageData) ? `<img class="reminder-thumbnail" src="${escapeHtml(item.imageData)}" alt="" />` : ""}<button class="reminder-time" data-action="edit">${item.status === "done" ? "已完成" : formatDue(item.dueAt)} <span>›</span></button></div>`).join("");
 }
 function openEditor(item = null) {
   editingId = item?.id || null; $("#editorTitle").textContent = item ? "编辑提醒" : "新建提醒";
   $("#titleInput").value = item?.title || ""; $("#noteInput").value = item?.note || "";
+  editorImageData = isSupportedImageData(item?.imageData) ? item.imageData : ""; $("#imageStatus").textContent = ""; renderEditorImage();
   $("#dueInput").value = toLocalInput(item ? new Date(item.dueAt) : new Date(Date.now() + 30 * 60000)); $("#dueInput").min = toLocalInput(new Date());
   $("#deleteButton").classList.toggle("hidden", !item); $("#editorOverlay").classList.remove("hidden"); setTimeout(() => $("#titleInput").focus(), 50);
 }
@@ -166,6 +210,14 @@ $("#searchInput").addEventListener("focus", refreshSearchResults);
 $("#clearSearch").addEventListener("click", () => { $("#searchInput").value = ""; refreshSearchResults(); $("#searchInput").focus(); });
 $("#searchResults").addEventListener("click", (event) => { const result = event.target.closest("[data-search-id]"); if (result) locateSearchResult(result.dataset.searchId); });
 document.addEventListener("mousedown", (event) => { if (!event.target.closest(".reminder-search")) $("#searchResults").classList.add("hidden"); });
+$("#imageDropZone").addEventListener("click", () => $("#imageInput").click());
+$("#replaceImageButton").addEventListener("click", () => $("#imageInput").click());
+$("#removeImageButton").addEventListener("click", () => { editorImageData = ""; $("#imageStatus").textContent = "图片已移除，保存后生效"; renderEditorImage(); });
+$("#imageInput").addEventListener("change", async (event) => { const [file] = event.target.files; if (file) await setEditorImage(file); event.target.value = ""; });
+$("#imageDropZone").addEventListener("dragover", (event) => { event.preventDefault(); event.currentTarget.classList.add("is-dragging"); });
+$("#imageDropZone").addEventListener("dragleave", (event) => event.currentTarget.classList.remove("is-dragging"));
+$("#imageDropZone").addEventListener("drop", async (event) => { event.preventDefault(); event.currentTarget.classList.remove("is-dragging"); const [file] = event.dataTransfer.files; if (file) await setEditorImage(file); });
+$("#editorOverlay").addEventListener("paste", async (event) => { const image = [...event.clipboardData.items].find((item) => item.type.startsWith("image/"))?.getAsFile(); if (image) { event.preventDefault(); await setEditorImage(image); } });
 $("#testReminderButton").addEventListener("click", async () => { await window.jishi.testReminder(); });
 $("#exportButton").addEventListener("click", exportReminders);
 $("#importButton").addEventListener("click", () => $("#importFile").click());
@@ -196,7 +248,7 @@ $("#reminderList").addEventListener("click", async (event) => {
   }
 });
 $("#reminderForm").addEventListener("submit", async (event) => {
-  event.preventDefault(); const record = { title: $("#titleInput").value.trim(), note: $("#noteInput").value.trim(), dueAt: new Date($("#dueInput").value).toISOString() };
+  event.preventDefault(); const record = { title: $("#titleInput").value.trim(), note: $("#noteInput").value.trim(), imageData: editorImageData, dueAt: new Date($("#dueInput").value).toISOString() };
   if (!record.title) return; if (editingId) Object.assign(state.reminders.find((item) => item.id === editingId), record); else state.reminders.push({ id: crypto.randomUUID(), ...record, status: "pending" });
   currentView = "pending"; await persist(); closeDialog("editor");
 });

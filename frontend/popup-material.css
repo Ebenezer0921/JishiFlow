@@ -10,6 +10,7 @@ body { padding: 0; color: var(--md-on-surface); font-family: var(--popup-font, v
 .popup h1 { margin: 0 0 8px; color: var(--md-on-surface); font-size: calc(20px * var(--text-scale,1)); line-height: 1.4; letter-spacing: 0; overflow-wrap: anywhere; }
 .popup h2 { margin: 0 0 12px; color: var(--md-on-surface); font-size: calc(17px * var(--text-scale,1)); line-height: 1.4; }
 .popup p { min-height: 0; margin: 0; color: var(--popup-secondary, var(--md-on-surface-variant)); font-size: calc(14px * var(--text-scale,1)); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.popup .reminder-image { width: 100%; max-height: 150px; margin-top: 10px; display: block; border-radius: 10px; object-fit: contain; background: var(--md-surface-container); }
 .popup button { font-family: inherit; font-size: calc(14px * var(--text-scale,1)); }
 .popup button:disabled { cursor: default; }
 .actions { gap: 8px; margin-top: 16px; }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'" />
   <title>及时提醒</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="settings.css" />
@@ -34,6 +34,13 @@
         <label>提醒事项<input id="titleInput" required maxlength="120" placeholder="要提醒我什么？" /></label>
         <label>提醒时间<input id="dueInput" required type="datetime-local" /></label>
         <label><span>备注 <small class="field-optional">选填</small></span><textarea id="noteInput" maxlength="500" placeholder="补充地点、资料或其他说明"></textarea></label>
+        <section class="image-attachment" aria-labelledby="imageAttachmentLabel">
+          <div class="image-attachment-heading"><span id="imageAttachmentLabel">图片 <small class="field-optional">选填</small></span><small>可直接按 Ctrl+V 粘贴</small></div>
+          <input id="imageInput" class="hidden" type="file" accept="image/png,image/jpeg,image/webp" />
+          <button id="imageDropZone" class="image-drop-zone" type="button"><strong>添加图片</strong><span>点击选择、拖入，或粘贴剪贴板图片</span></button>
+          <div id="imagePreview" class="image-preview hidden"><img id="imagePreviewContent" alt="提醒图片预览" /><div><button id="replaceImageButton" type="button">更换图片</button><button id="removeImageButton" type="button">移除</button></div></div>
+          <span id="imageStatus" class="image-status" role="status"></span>
+        </section>
         <div class="form-actions"><button id="deleteButton" type="button" class="delete-button">删除</button><span></span><button type="button" class="cancel-button" data-close="editor">取消</button><button type="submit" class="save-button">保存</button></div>
       </form>
     </section>

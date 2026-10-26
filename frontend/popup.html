@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'" />
   <title>提醒</title>
   <link rel="stylesheet" href="design-tokens.css" />
   <link rel="stylesheet" href="popup.css" />
@@ -14,7 +14,7 @@
     <div id="dragHandle" class="top"><img class="logo" src="assets/app-icon.svg" alt="" width="24" height="24" /><strong>及时提醒</strong><span class="now">现在</span><button id="closeButton" aria-label="暂时关闭提醒，1分钟后再次提醒" title="暂时关闭，1分钟后再次提醒">×</button></div>
     <div id="previewCountdown" class="preview-countdown hidden"><span></span><em id="previewCountdownText"></em></div>
     <section id="viewPanel">
-      <h1 id="title"></h1><p id="note"></p>
+      <h1 id="title"></h1><p id="note"></p><img id="reminderImage" class="reminder-image hidden" alt="提醒附图" />
       <div class="actions"><button id="completeButton" class="primary">✓ 完成</button><button id="laterButton" title="选择延后提醒的时间">未完成</button></div>
       <button id="editButton" class="link">添加备注或修改提醒事项</button>
       <small class="repeat-note">直接关闭后，1 分钟后会再次提醒</small>

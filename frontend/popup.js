@@ -48,7 +48,18 @@ function fitPopup() {
   });
 }
 function show(panel) { ["viewPanel", "snoozePanel", "editPanel"].forEach((id) => $(`#${id}`).classList.toggle("hidden", id !== panel)); $(`#${panel}`).scrollTop = 0; if (panel === "editPanel") $("#editTitle").focus(); fitPopup(); }
-function render(item) { reminder = item; if (!item) return; $("#title").textContent = item.title; $("#note").textContent = item.note || "提醒时间到了"; }
+function render(item) {
+  reminder = item;
+  if (!item) return;
+  $("#title").textContent = item.title;
+  $("#note").textContent = item.note || "提醒时间到了";
+  const image = $("#reminderImage");
+  const hasImage = typeof item.imageData === "string" && /^data:image\/(png|jpeg|webp);base64,/.test(item.imageData);
+  image.src = hasImage ? item.imageData : "";
+  image.classList.toggle("hidden", !hasImage);
+  if (hasImage) image.addEventListener("load", fitPopup, { once: true });
+  fitPopup();
+}
 $("#dragHandle").addEventListener("mousedown", (event) => { if (event.button === 0 && !event.target.closest("button")) window.jishi.startPopupDrag(); });
 $("#closeButton").addEventListener("click", () => window.jishi.closePopup());
 $("#completeButton").addEventListener("click", () => window.jishi.completeReminder(reminder.id));
