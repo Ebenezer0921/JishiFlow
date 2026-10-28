@@ -36,6 +36,8 @@ struct Reminder {
     note: String,
     #[serde(default)]
     image_data: String,
+    #[serde(default)]
+    priority: String,
     due_at: String,
     status: String,
     #[serde(default)]
@@ -63,11 +65,23 @@ struct Settings {
     search_highlight_seconds: u8,
     #[serde(default = "default_preview_seconds")]
     preview_seconds: u8,
+    #[serde(default = "default_tomorrow_time")]
+    tomorrow_reminder_time: String,
+    #[serde(default = "default_popup_gap")]
+    popup_gap: u16,
+    #[serde(default = "default_popup_margin")]
+    popup_margin: u16,
+    #[serde(default = "default_priority_enabled")]
+    priority_enabled: bool,
+    #[serde(default)]
+    priority_sort: bool,
+    #[serde(default)]
+    priority_palette: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { default_snooze: default_snooze(), popup_position: default_position(), popup_size: default_popup_size(), text_size: default_text_size(), popup_font: default_popup_font(), popup_transparency: 0, search_scope: default_search_scope(), search_highlight_seconds: default_search_highlight_seconds(), preview_seconds: default_preview_seconds() }
+        Self { default_snooze: default_snooze(), popup_position: default_position(), popup_size: default_popup_size(), text_size: default_text_size(), popup_font: default_popup_font(), popup_transparency: 0, search_scope: default_search_scope(), search_highlight_seconds: default_search_highlight_seconds(), preview_seconds: default_preview_seconds(), tomorrow_reminder_time: default_tomorrow_time(), popup_gap: default_popup_gap(), popup_margin: default_popup_margin(), priority_enabled: true, priority_sort: false, priority_palette: String::new() }
     }
 }
 
@@ -96,6 +110,15 @@ struct RuntimeState {
     cooldowns: Mutex<HashMap<String, Instant>>,
 }
 
+fn default_tomorrow_time() -> String { "09:00".into() }
+fn default_popup_gap() -> u16 { 12 }
+fn default_popup_margin() -> u16 { 20 }
+fn default_priority_enabled() -> bool { true }
+fn valid_clock(value: &str) -> bool {
+    let b = value.as_bytes();
+    b.len() == 5 && b[2] == b':' && [b[0],b[1],b[3],b[4]].iter().all(u8::is_ascii_digit)
+        && value[..2].parse::<u8>().unwrap_or(255) < 24 && value[3..].parse::<u8>().unwrap_or(255) < 60
+}
 fn default_snooze() -> i64 { 10 }
 fn default_position() -> String { "bottom-right".into() }
 fn default_popup_size() -> u8 { 3 }
@@ -106,6 +129,10 @@ fn default_search_highlight_seconds() -> u8 { 3 }
 fn default_preview_seconds() -> u8 { 5 }
 
 fn sanitize(mut value: PersistedState) -> PersistedState {
+    if !["", "muted"].contains(&value.settings.priority_palette.as_str()) { value.settings.priority_palette.clear(); }
+    value.settings.popup_gap = value.settings.popup_gap.min(64);
+    value.settings.popup_margin = value.settings.popup_margin.min(120);
+    if !valid_clock(&value.settings.tomorrow_reminder_time) { value.settings.tomorrow_reminder_time = default_tomorrow_time(); }
     value.settings.default_snooze = value.settings.default_snooze.clamp(1, 525_600);
     value.settings.popup_size = value.settings.popup_size.clamp(1, 5);
     value.settings.text_size = value.settings.text_size.clamp(1, 5);
@@ -122,6 +149,7 @@ fn sanitize(mut value: PersistedState) -> PersistedState {
         value.settings.popup_position = default_position();
     }
     for reminder in &mut value.reminders {
+        if !["", "urgent", "medium", "normal"].contains(&reminder.priority.as_str()) { reminder.priority.clear(); }
         let valid_image = reminder.image_data.len() <= 1_200_000
             && ["data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"]
                 .iter().any(|prefix| reminder.image_data.starts_with(prefix));
@@ -208,9 +236,9 @@ fn next_popup_slot(active: &HashMap<String, ActivePopup>, anchor: &str, area: [i
         .map(|item| item.slot + 1).max().unwrap_or(0)
 }
 
-fn popup_origin(area: [i32; 4], position: &str, width: i32, height: i32, offset: i32) -> PhysicalPosition<i32> {
+fn popup_origin(area: [i32; 4], position: &str, width: i32, height: i32, offset: i32, margin: i32) -> PhysicalPosition<i32> {
     let [left, top, right, bottom] = area;
-    let margin = 20i32;
+
     let area_width = right - left;
     let area_height = bottom - top;
     let (vertical, horizontal) = if position == "center" {
@@ -240,6 +268,7 @@ fn reflow_popup_group(app: &AppHandle, anchor: &str, area: [i32; 4]) {
         .filter(|(_, item)| same_popup_group(item, anchor, area))
         .map(|(label, item)| (label.clone(), item.clone())).collect::<Vec<_>>()).unwrap_or_default();
     group.sort_by_key(|(_, item)| item.slot);
+    let layout = load_from_disk(app).settings;
     let first_height = group.first().map(|(_, item)| item.height).unwrap_or(0);
     let mut offset = 0;
     for (label, item) in group {
@@ -247,9 +276,9 @@ fn reflow_popup_group(app: &AppHandle, anchor: &str, area: [i32; 4]) {
             let width = (396.0 * item.scale).round() as u32;
             let _ = window.set_size(Size::Physical(PhysicalSize::new(width, item.height as u32)));
             let position = popup_origin(area, anchor, width as i32, item.height,
-                popup_stack_offset(anchor, offset, first_height, item.height));
+                popup_stack_offset(anchor, offset, first_height, item.height), layout.popup_margin as i32);
             let _ = window.set_position(Position::Physical(position));
-            offset += item.height + 12;
+            offset += item.height + layout.popup_gap as i32;
         }
     }
 }
@@ -327,7 +356,17 @@ where F: FnOnce(&mut Reminder) {
 fn state_load(app: AppHandle) -> PersistedState { load_from_disk(&app) }
 
 #[tauri::command]
-fn state_save(app: AppHandle, state: PersistedState) -> Result<PersistedState, String> { save_to_disk(&app, state) }
+fn state_save(app: AppHandle, state: PersistedState) -> Result<PersistedState, String> {
+    let before = load_from_disk(&app).settings;
+    let saved = save_to_disk(&app, state)?;
+    if before.popup_gap != saved.settings.popup_gap || before.popup_margin != saved.settings.popup_margin {
+        let mut groups = app.state::<RuntimeState>().active.lock().map(|active| active.values()
+            .filter(|item| !item.moved_by_user).map(|item| (item.anchor.clone(), item.area)).collect::<Vec<_>>()).unwrap_or_default();
+        groups.sort(); groups.dedup();
+        for (anchor, area) in groups { reflow_popup_group(&app, &anchor, area); }
+    }
+    Ok(saved)
+}
 
 #[tauri::command]
 fn popup_get(window: WebviewWindow, runtime: State<'_, RuntimeState>) -> Option<Reminder> {
@@ -371,11 +410,12 @@ fn popup_snooze(app: AppHandle, window: WebviewWindow, id: String, due_at: Strin
 }
 
 #[tauri::command]
-fn popup_update(app: AppHandle, window: WebviewWindow, id: String, title: String, note: String) -> Result<PersistedState, String> {
+fn popup_update(app: AppHandle, window: WebviewWindow, id: String, title: String, note: String, priority: Option<String>) -> Result<PersistedState, String> {
+    let priority = priority.map(|value| if ["", "urgent", "medium", "normal"].contains(&value.as_str()) { value } else { String::new() });
     if let Ok(mut active) = app.state::<RuntimeState>().active.lock() {
-        if let Some(item) = active.get_mut(window.label()) { item.reminder.title = title.clone(); item.reminder.note = note.clone(); }
+        if let Some(item) = active.get_mut(window.label()) { item.reminder.title = title.clone(); item.reminder.note = note.clone(); if let Some(value) = &priority { item.reminder.priority = value.clone(); } }
     }
-    if id == "__test__" { Ok(load_from_disk(&app)) } else { update_reminder(&app, &id, |item| { item.title = title; item.note = note; }) }
+    if id == "__test__" { Ok(load_from_disk(&app)) } else { update_reminder(&app, &id, |item| { item.title = title; item.note = note; if let Some(value) = priority { item.priority = value; } }) }
 }
 
 #[tauri::command]
@@ -386,7 +426,7 @@ async fn popup_test(app: AppHandle) -> Result<(), String> {
     let reminder = Reminder {
         id: "__test__".into(), title: "这是一条测试提醒".into(),
         note: "提醒弹窗工作正常。你可以试试完成、未完成或修改备注。".into(),
-        image_data: String::new(),
+        image_data: String::new(), priority: String::new(),
         due_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true), status: "pending".into(), completed_at: None,
     };
     let handle = app.clone();
@@ -401,7 +441,7 @@ async fn popup_preview(app: AppHandle) -> Result<(), String> {
         id: format!("__preview__{}", Utc::now().timestamp_millis()),
         title: "提醒卡片预览".into(),
         note: "这里会展示当前设置的卡片大小、字体、文字大小和透明度。".into(),
-        image_data: String::new(),
+        image_data: String::new(), priority: String::new(),
         due_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
         status: "pending".into(),
         completed_at: None,
@@ -422,7 +462,7 @@ mod popup_layout_tests {
 
     fn fixture(anchor: &str, area: [i32; 4], slot: usize) -> ActivePopup {
         ActivePopup { reminder: Reminder { id: "layout-test".into(), title: "test".into(), note: String::new(),
-            image_data: String::new(),
+            image_data: String::new(), priority: String::new(),
             due_at: "2099-01-01T00:00:00Z".into(), status: "pending".into(), completed_at: None },
             slot, moved_by_user: false, anchor: anchor.into(), area, scale: 1.0, height: 260 }
     }
@@ -434,16 +474,58 @@ mod popup_layout_tests {
             "settings":{}
         }"#).unwrap();
         assert_eq!(value.reminders[0].image_data, "");
+        assert_eq!(value.reminders[0].priority, "");
+        assert_eq!(value.settings.tomorrow_reminder_time, "09:00");
+        assert_eq!(value.settings.popup_gap, 12);
+        assert_eq!(value.settings.popup_margin, 20);
+        assert!(value.settings.priority_enabled);
+        assert!(!value.settings.priority_sort);
+    }
+
+    #[test]
+    fn new_settings_and_priority_survive_roundtrip_and_are_sanitized() {
+        let mut value = PersistedState::default();
+        value.settings.tomorrow_reminder_time = "23:59".into();
+        value.settings.popup_gap = 0;
+        value.settings.popup_margin = 120;
+        value.reminders.push(fixture("bottom-right", [0,0,1920,1040], 0).reminder);
+        value.reminders[0].priority = "urgent".into();
+        let text = serde_json::to_string(&value).unwrap();
+        let mut saved = sanitize(serde_json::from_str(&text).unwrap());
+        assert_eq!(saved.reminders[0].priority, "urgent");
+        assert_eq!(saved.settings.tomorrow_reminder_time, "23:59");
+        assert_eq!(saved.settings.popup_gap, 0);
+        assert_eq!(saved.settings.popup_margin, 120);
+        saved.settings.tomorrow_reminder_time = "24:00".into();
+        saved.settings.popup_gap = 999;
+        saved.settings.popup_margin = 999;
+        saved.reminders[0].priority = "invalid".into();
+        let safe = sanitize(saved);
+        assert_eq!(safe.settings.tomorrow_reminder_time, "09:00");
+        assert_eq!(safe.settings.popup_gap, 64);
+        assert_eq!(safe.settings.popup_margin, 120);
+        assert_eq!(safe.reminders[0].priority, "");
+        assert!(!valid_clock("苹方"));
+    }
+
+    #[test]
+    fn configurable_margin_anchors_to_work_area() {
+        let area = [-1920, 0, 0, 1040];
+        assert_eq!(popup_origin(area, "bottom-left", 396,260,0,0), PhysicalPosition::new(-1920,780));
+        assert_eq!(popup_origin(area, "bottom-left", 396,260,0,36), PhysicalPosition::new(-1884,744));
+        let first = popup_origin(area, "bottom-right",396,260,0,20);
+        let second = popup_origin(area, "bottom-right",396,260,260+4,20);
+        assert_eq!(first.y - (second.y+260),4);
     }
 
     #[test]
     fn sanitize_keeps_supported_images_and_rejects_other_data_urls() {
         let mut value = PersistedState::default();
         value.reminders.push(Reminder { id: "safe".into(), title: "safe".into(), note: String::new(),
-            image_data: "data:image/webp;base64,AAAA".into(), due_at: "2099-01-01T00:00:00Z".into(),
+            image_data: "data:image/webp;base64,AAAA".into(), priority: String::new(), due_at: "2099-01-01T00:00:00Z".into(),
             status: "pending".into(), completed_at: None });
         value.reminders.push(Reminder { id: "unsafe".into(), title: "unsafe".into(), note: String::new(),
-            image_data: "data:image/svg+xml;base64,AAAA".into(), due_at: "2099-01-01T00:00:00Z".into(),
+            image_data: "data:image/svg+xml;base64,AAAA".into(), priority: String::new(), due_at: "2099-01-01T00:00:00Z".into(),
             status: "pending".into(), completed_at: None });
         let safe = sanitize(value);
         assert_eq!(safe.reminders[0].image_data, "data:image/webp;base64,AAAA");
@@ -467,7 +549,7 @@ mod popup_layout_tests {
     fn all_nine_first_cards_use_their_own_anchor() {
         let area = [0, 0, 2560, 1400];
         for anchor in VALID_POSITIONS {
-            let p = popup_origin(area, anchor, 396, 260, 0);
+            let p = popup_origin(area, anchor, 396, 260, 0, 20);
             let x = if anchor.ends_with("left") { 20 } else if anchor.ends_with("right") { 2144 } else { 1082 };
             let y = if anchor.starts_with("top") { 20 } else if anchor.starts_with("bottom") { 1120 } else { 570 };
             assert_eq!(p, PhysicalPosition::new(x, y), "{anchor}");
@@ -478,8 +560,8 @@ mod popup_layout_tests {
     fn same_group_uses_previous_actual_heights_and_gap() {
         let area = [0, 0, 2560, 1400];
         for anchor in VALID_POSITIONS {
-            let first = popup_origin(area, anchor, 396, 260, 0);
-            let second = popup_origin(area, anchor, 396, 330, popup_stack_offset(anchor, 260 + 12, 260, 330));
+            let first = popup_origin(area, anchor, 396, 260, 0, 20);
+            let second = popup_origin(area, anchor, 396, 330, popup_stack_offset(anchor, 260 + 12, 260, 330), 20);
             if anchor.starts_with("top") {
                 assert_eq!(second.y - (first.y + 260), 12);
             } else if anchor.starts_with("bottom") {

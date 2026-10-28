@@ -3,6 +3,9 @@ let currentView = "pending";
 let editingId = null;
 let batchRows = [];
 let editorImageData = "";
+const priorityNames = { urgent: "紧急", medium: "中等", normal: "一般" };
+const priorityRank = { urgent: 0, medium: 1, normal: 2 };
+function priorityMarkup(item) { return state.settings.priorityEnabled !== false && priorityNames[item.priority] ? '<span class="priority-badge priority-' + item.priority + '">' + priorityNames[item.priority] + '</span>' : ''; }
 const reminderIcon = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>';
 const positionNames = { "top-left": "左上", "top-center": "顶部居中", "top-right": "右上", "center-left": "左侧居中", center: "屏幕中央", "center-right": "右侧居中", "bottom-left": "左下", "bottom-center": "底部居中", "bottom-right": "右下" };
 const sizeNames = ["", "很小", "较小", "标准", "较大", "很大"];
@@ -68,9 +71,9 @@ function refreshSearchResults() {
   const preferredStatus = currentView === "done" ? "done" : "pending";
   const matches = state.reminders
     .filter((item) => item.title.toLocaleLowerCase().includes(query) || (searchNotes && (item.note || "").toLocaleLowerCase().includes(query)))
-    .sort((a, b) => Number(b.status === preferredStatus) - Number(a.status === preferredStatus))
+    .sort((a, b) => Number(b.status === preferredStatus) - Number(a.status === preferredStatus) || (state.settings.prioritySort ? (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) : 0))
     .slice(0, 30);
-  $("#searchResults").innerHTML = matches.length ? matches.map((item) => `<button class="search-result" data-search-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.note || formatDue(item.dueAt))}</small><em>${item.status === "done" ? "已完成" : "待提醒"}</em></button>`).join("") : '<div class="search-empty">没有找到相关提醒</div>';
+  $("#searchResults").innerHTML = matches.length ? matches.map((item) => `<button class="search-result" data-search-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.title)}</strong>${priorityMarkup(item)}<small>${escapeHtml(item.note || formatDue(item.dueAt))}</small><em>${item.status === "done" ? "已完成" : "待提醒"}</em></button>`).join("") : '<div class="search-empty">没有找到相关提醒</div>';
   $("#searchResults").classList.remove("hidden");
 }
 function locateSearchResult(id) {
@@ -95,7 +98,10 @@ function parseBatchLine(source, lineNumber) {
   const beforeTime = text.slice(0, timeMatch.index).trim();
   const dateMatch = beforeTime.match(/(?:^|\s)(今天|明天|后天|\d{4}[.-]\d{1,2}[.-]\d{1,2}|\d{1,2}[.-]\d{1,2})\s*$/);
   const dateText = dateMatch?.[1] || "今天";
-  const title = (dateMatch ? beforeTime.slice(0, dateMatch.index) : beforeTime).trim();
+  let title = (dateMatch ? beforeTime.slice(0, dateMatch.index) : beforeTime).trim();
+  const priorityMatch = title.match(/\[(紧急|中等|一般)\]/);
+  const priority = priorityMatch ? ({ 紧急: "urgent", 中等: "medium", 一般: "normal" })[priorityMatch[1]] : "";
+  if (priorityMatch) title = title.replace(priorityMatch[0], "").trim();
   if (!title) return batchError(lineNumber, text, "缺少提醒事项");
   const now = new Date();
   let year = now.getFullYear(), month = now.getMonth() + 1, day = now.getDate();
@@ -110,7 +116,7 @@ function parseBatchLine(source, lineNumber) {
   const due = new Date(year, month - 1, day, hour, minute, 0, 0);
   if (due.getFullYear() !== year || due.getMonth() !== month - 1 || due.getDate() !== day) return batchError(lineNumber, text, "日期无效，请检查月份和日期");
   const status = due.getTime() <= Date.now() ? "past" : "valid";
-  return { lineNumber, source: text, title, dueAt: due.toISOString(), status, message: status === "past" ? "该时间已经过去，需要确认后创建" : "识别成功" };
+  return { lineNumber, source: text, title, priority, dueAt: due.toISOString(), status, message: status === "past" ? "该时间已经过去，需要确认后创建" : "识别成功" };
 }
 function formatBatchDue(value) {
   return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
@@ -125,7 +131,7 @@ function refreshBatchPreview() {
   $("#previewSummary").textContent = batchRows.length ? `${ready} 条可创建${errors ? ` · ${errors} 条有错误` : ""}` : "等待输入";
   $("#batchPreview").innerHTML = batchRows.length ? batchRows.map((item) => {
     if (item.status === "error") return `<div class="preview-row error"><span class="preview-icon">!</span><span class="preview-copy"><strong>第 ${item.lineNumber} 行：${escapeHtml(item.source)}</strong><small>${escapeHtml(item.message)}</small></span><span class="preview-time">无法识别</span></div>`;
-    return `<div class="preview-row ${item.status}"><span class="preview-icon">${item.status === "past" ? "!" : "✓"}</span><span class="preview-copy"><strong>${escapeHtml(item.title)}</strong><small>第 ${item.lineNumber} 行 · ${escapeHtml(item.message)}</small></span><span class="preview-time">${formatBatchDue(item.dueAt)}</span></div>`;
+    return `<div class="preview-row ${item.status}"><span class="preview-icon">${item.status === "past" ? "!" : "✓"}</span><span class="preview-copy"><strong>${escapeHtml(item.title)}</strong>${priorityMarkup(item)}<small>第 ${item.lineNumber} 行 · ${escapeHtml(item.message)}</small></span><span class="preview-time">${formatBatchDue(item.dueAt)}</span></div>`;
   }).join("") : '<div class="preview-empty">输入提醒后，这里会显示解析结果。</div>';
   $("#pastConfirmRow").classList.toggle("hidden", past === 0);
   if (!past) $("#pastConfirm").checked = false;
@@ -162,7 +168,7 @@ async function importReminders(file) {
     const incoming = valid.flatMap((item) => {
       if (item.id && existingIds.has(item.id)) { skipped += 1; return []; }
       const id = item.id || crypto.randomUUID(); existingIds.add(id);
-      return [{ id, title: item.title.trim(), note: typeof item.note === "string" ? item.note : "", imageData: isSupportedImageData(item.imageData) ? item.imageData : "", dueAt: new Date(item.dueAt).toISOString(), status: item.status === "done" ? "done" : "pending", completedAt: item.completedAt || null }];
+      return [{ id, title: item.title.trim(), note: typeof item.note === "string" ? item.note : "", imageData: isSupportedImageData(item.imageData) ? item.imageData : "", priority: priorityNames[item.priority] ? item.priority : "", dueAt: new Date(item.dueAt).toISOString(), status: item.status === "done" ? "done" : "pending", completedAt: item.completedAt || null }];
     });
     state.reminders.push(...incoming);
     await persist();
@@ -172,11 +178,19 @@ async function importReminders(file) {
   }
 }
 function render() {
+  document.body.dataset.priorityPalette = state.settings.priorityPalette || "";
+  $("#priorityPalette").value = state.settings.priorityPalette || "";
   const pendingCount = state.reminders.filter((item) => item.status === "pending").length;
   $("#todayText").textContent = `今天 · ${pendingCount} 个待办`;
-  const items = state.reminders.filter((item) => item.status === currentView).sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
+  const items = state.reminders.filter((item) => item.status === currentView).sort((a, b) => (state.settings.prioritySort ? (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) : 0) || Date.parse(a.dueAt) - Date.parse(b.dueAt));
   $("#listTitle").textContent = currentView === "pending" ? "接下来" : "已完成";
   $("#itemCount").textContent = items.length; $("#snoozeInput").value = state.settings.defaultSnooze;
+  $("#tomorrowReminderTime").value = state.settings.tomorrowReminderTime || "09:00";
+  $("#popupGap").value = state.settings.popupGap ?? 12;
+  $("#popupMargin").value = state.settings.popupMargin ?? 20;
+  $("#priorityEnabled").checked = state.settings.priorityEnabled !== false;
+  $("#prioritySort").checked = !!state.settings.prioritySort;
+  $("#priorityField").classList.toggle("hidden", state.settings.priorityEnabled === false);
   const popupSize = state.settings.popupSize || 3, textSize = state.settings.textSize || 3;
   $("#popupSizeInput").value = popupSize; $("#popupSizeName").textContent = sizeNames[popupSize];
   $("#textSizeInput").value = textSize; $("#textSizeName").textContent = sizeNames[textSize];
@@ -192,9 +206,10 @@ function render() {
   if (!items.length) {
     $("#reminderList").innerHTML = `<div class="empty-state"><span class="empty-bell">${reminderIcon}</span><strong>${currentView === "pending" ? "现在没有待提醒事项" : "还没有完成的事项"}</strong><span>${currentView === "pending" ? "可以放心去做眼前的事。" : "完成一个提醒后会出现在这里。"}</span></div>`; return;
   }
-  $("#reminderList").innerHTML = items.map((item) => `<div class="reminder-row ${item.status === "done" ? "is-done" : ""}" data-id="${item.id}"><button class="check-button" aria-label="${escapeHtml(item.status === "done" ? "重新启用提醒：" + item.title : "完成提醒：" + item.title)}" data-action="toggle">${item.status === "done" ? "✓" : ""}</button><button class="reminder-copy" data-action="edit"><strong>${escapeHtml(item.title)}</strong>${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}</button>${isSupportedImageData(item.imageData) ? `<img class="reminder-thumbnail" src="${escapeHtml(item.imageData)}" alt="" />` : ""}<button class="reminder-time" data-action="edit">${item.status === "done" ? "已完成" : formatDue(item.dueAt)} <span>›</span></button></div>`).join("");
+  $("#reminderList").innerHTML = items.map((item) => `<div class="reminder-row ${item.status === "done" ? "is-done" : ""}" data-id="${item.id}"><button class="check-button" aria-label="${escapeHtml(item.status === "done" ? "重新启用提醒：" + item.title : "完成提醒：" + item.title)}" data-action="toggle">${item.status === "done" ? "✓" : ""}</button><button class="reminder-copy" data-action="edit"><strong>${escapeHtml(item.title)}</strong>${priorityMarkup(item)}${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}</button>${isSupportedImageData(item.imageData) ? `<img class="reminder-thumbnail" src="${escapeHtml(item.imageData)}" alt="" />` : ""}<button class="reminder-time" data-action="edit">${item.status === "done" ? "已完成" : formatDue(item.dueAt)} <span>›</span></button></div>`).join("");
 }
 function openEditor(item = null) {
+  $("#priorityInput").value = item?.priority || "";
   editingId = item?.id || null; $("#editorTitle").textContent = item ? "编辑提醒" : "新建提醒";
   $("#titleInput").value = item?.title || ""; $("#noteInput").value = item?.note || "";
   editorImageData = isSupportedImageData(item?.imageData) ? item.imageData : ""; $("#imageStatus").textContent = ""; renderEditorImage();
@@ -248,7 +263,7 @@ $("#reminderList").addEventListener("click", async (event) => {
   }
 });
 $("#reminderForm").addEventListener("submit", async (event) => {
-  event.preventDefault(); const record = { title: $("#titleInput").value.trim(), note: $("#noteInput").value.trim(), imageData: editorImageData, dueAt: new Date($("#dueInput").value).toISOString() };
+  event.preventDefault(); const record = { title: $("#titleInput").value.trim(), note: $("#noteInput").value.trim(), imageData: editorImageData, priority: $("#priorityInput").value, dueAt: new Date($("#dueInput").value).toISOString() };
   if (!record.title) return; if (editingId) Object.assign(state.reminders.find((item) => item.id === editingId), record); else state.reminders.push({ id: crypto.randomUUID(), ...record, status: "pending" });
   currentView = "pending"; await persist(); closeDialog("editor");
 });
@@ -270,8 +285,13 @@ $("#pastConfirm").addEventListener("change", refreshBatchPreview);
 $("#createBatchButton").addEventListener("click", async () => {
   const creatable = batchRows.filter((item) => item.status !== "error");
   if (!creatable.length || (creatable.some((item) => item.status === "past") && !$("#pastConfirm").checked)) return;
-  state.reminders.push(...creatable.map((item) => ({ id: crypto.randomUUID(), title: item.title, note: "", dueAt: item.dueAt, status: "pending" })));
+  state.reminders.push(...creatable.map((item) => ({ id: crypto.randomUUID(), title: item.title, priority: item.priority || "", note: "", dueAt: item.dueAt, status: "pending" })));
   currentView = "pending"; await persist(); $("#batchInput").value = ""; refreshBatchPreview(); closeDialog("batch");
 });
 window.jishi.onStateChanged((next) => { state = next; render(); });
 window.jishi.loadState().then((loaded) => { state = loaded; render(); });
+
+$("#tomorrowReminderTime").addEventListener("change", async event => { if (!event.target.validity.valid || !event.target.value) return; state.settings.tomorrowReminderTime = event.target.value; await persist(); });
+for (const [id, max] of [["popupGap",64],["popupMargin",120]]) $("#"+id).addEventListener("change", async event => { state.settings[id] = Math.max(0,Math.min(max,Math.round(Number(event.target.value)||0))); await persist(); await window.jishi.previewReminder(); });
+for (const id of ["priorityEnabled","prioritySort"]) $("#"+id).addEventListener("change", async event => { state.settings[id] = event.target.checked; await persist(); });
+$("#priorityPalette").addEventListener("change", async event => { state.settings.priorityPalette = event.target.value; await persist(); });

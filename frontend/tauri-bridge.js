@@ -11,7 +11,7 @@
     completeReminder: (id) => invoke("popup_complete", { id }),
     disableReminder: (id) => invoke("popup_disable", { id }),
     snoozeReminder: (id, dueAt) => invoke("popup_snooze", { id, dueAt }),
-    updateFromPopup: (id, title, note) => invoke("popup_update", { id, title, note }),
+    updateFromPopup: (id, title, note, priority) => invoke("popup_update", { id, title, note, priority: priority ?? null }),
     showMainWindow: () => invoke("window_show"),
     testReminder: () => invoke("popup_test"),
     previewReminder: () => invoke("popup_preview"),
