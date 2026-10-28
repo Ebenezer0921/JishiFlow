@@ -5,7 +5,7 @@
 ## 创建环境
 
 1. 在 Codex 中选择 **Work in → Cloud → Create environment**。
-2. 选择私有仓库 `Ebenezer0921/jishi-reminder`。
+2. 选择仓库 `Ebenezer0921/JishiFlow`。
 3. 允许 **Package managers** 网络访问。Rust 依赖需要：
    - `crates.io`
    - `index.crates.io`
