@@ -6,6 +6,7 @@
 - 优先级：下一版本发布前阻断项
 - 发现时间：2026-10-29
 - 适用范围：所有 Windows 开发电脑与后续 Codex 接手任务
+- GitHub 跟踪：[#3](https://github.com/Ebenezer0921/JishiFlow/issues/3)
 
 本问题不得因为换电脑、切分支、重新打包或已有 release 构建而遗漏。只有完成 Windows 实机复现、代码修复和验收后，才能更新状态；写出代码或静态检查通过不能视为关闭。
 
