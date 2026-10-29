@@ -29,6 +29,12 @@
       </section>
     </div>
   </main>
+  <div id="imageViewerOverlay" class="dialog-overlay image-viewer-overlay hidden">
+    <section class="image-viewer-dialog" role="dialog" aria-modal="true" aria-label="查看提醒图片">
+      <button type="button" class="image-viewer-close" data-close="imageViewer" aria-label="关闭图片查看">×</button>
+      <img id="imageViewerContent" alt="提醒图片大图" />
+    </section>
+  </div>
   <div id="editorOverlay" class="dialog-overlay hidden">
     <section class="apple-dialog" role="dialog" aria-modal="true" aria-labelledby="editorTitle"><div class="dialog-top"><div><h2 id="editorTitle">新建提醒</h2><p>设置好时间后，及时会按你设置的位置提醒。</p></div><button class="dialog-close" aria-label="关闭提醒编辑窗口" data-close="editor">×</button></div>
       <form id="reminderForm" class="reminder-form">

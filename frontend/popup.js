@@ -64,12 +64,31 @@ function render(item) {
   const image = $("#reminderImage");
   const hasImage = typeof item.imageData === "string" && /^data:image\/(png|jpeg|webp);base64,/.test(item.imageData);
   image.src = hasImage ? item.imageData : "";
-  image.classList.toggle("hidden", !hasImage);
+  $("#reminderImageButton").classList.toggle("hidden", !hasImage);
+  if (!hasImage) closeImageViewer();
   if (hasImage) image.addEventListener("load", fitPopup, { once: true });
   fitPopup();
 }
 $("#dragHandle").addEventListener("mousedown", (event) => { if (event.button === 0 && !event.target.closest("button")) window.jishi.startPopupDrag(); });
 $("#closeButton").addEventListener("click", () => window.jishi.closePopup());
+let imageViewerOpener = null;
+function closeImageViewer() {
+  $("#imageViewerOverlay").classList.add("hidden");
+  $(".popup").inert = false;
+  $("#imageViewerContent").removeAttribute("src");
+  if (imageViewerOpener?.isConnected) imageViewerOpener.focus({ preventScroll: true });
+  imageViewerOpener = null;
+}
+$("#reminderImageButton").addEventListener("click", () => {
+  if (!reminder?.imageData) return;
+  imageViewerOpener = document.activeElement;
+  $("#imageViewerContent").src = reminder.imageData;
+  $("#imageViewerOverlay").classList.remove("hidden");
+  $(".popup").inert = true;
+  $("#imageViewerClose").focus({ preventScroll: true });
+});
+$("#imageViewerClose").addEventListener("click", closeImageViewer);
+$("#imageViewerOverlay").addEventListener("click", (event) => { if (event.target === event.currentTarget) closeImageViewer(); });
 $("#completeButton").addEventListener("click", () => window.jishi.completeReminder(reminder.id));
 $("#laterButton").addEventListener("click", () => { resetTomorrow(); $("#defaultButton").textContent = `默认 · ${settings.defaultSnooze} 分钟后`; $("#customTime").value = toLocalInput(new Date(Date.now() + settings.defaultSnooze * 60000)); $("#customTime").min = toLocalInput(new Date()); show("snoozePanel"); });
 $("#defaultButton").addEventListener("click", () => performSnooze(new Date(Date.now() + settings.defaultSnooze * 60000)));
@@ -83,7 +102,7 @@ window.jishi.onPopupChanged((item) => { render(item); show("viewPanel"); });
 Promise.all([window.jishi.getPopupReminder(), window.jishi.loadState()]).then(([item, state]) => { settings = state.settings; applyAppearance(settings); render(item); if (item?.id?.startsWith("__preview__")) startPreviewCountdown(settings.previewSeconds); fitPopup(); });
 new ResizeObserver(fitPopup).observe(document.querySelector(".popup"));
 window.addEventListener('resize', fitPopup);
-document.addEventListener('keydown', event => { if(event.key === 'Escape' && !snoozeBusy && $("#viewPanel").classList.contains('hidden')) { event.preventDefault(); show('viewPanel'); } });
+document.addEventListener('keydown', event => { if(event.key === 'Escape' && !$("#imageViewerOverlay").classList.contains('hidden')) { event.preventDefault(); closeImageViewer(); return; } if(event.key === 'Escape' && !snoozeBusy && $("#viewPanel").classList.contains('hidden')) { event.preventDefault(); show('viewPanel'); } });
 
 let snoozeBusy = false;
 async function performSnooze(due) {

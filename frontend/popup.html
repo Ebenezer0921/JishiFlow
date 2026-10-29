@@ -15,7 +15,7 @@
     <div id="dragHandle" class="top"><img class="logo" src="assets/app-icon.svg" alt="" width="24" height="24" /><strong>及时提醒</strong><span class="now">现在</span><button id="closeButton" aria-label="暂时关闭提醒，1分钟后再次提醒" title="暂时关闭，1分钟后再次提醒">×</button></div>
     <div id="previewCountdown" class="preview-countdown hidden"><span></span><em id="previewCountdownText"></em></div>
     <section id="viewPanel">
-      <div class="reminder-content" role="region" aria-label="提醒内容，可滚动查看" tabindex="0"><span id="popupPriority" class="priority-badge hidden"></span><h1 id="title"></h1><p id="note"></p><img id="reminderImage" class="reminder-image hidden" alt="提醒附图" /></div>
+      <div class="reminder-content" role="region" aria-label="提醒内容，可滚动查看" tabindex="0"><span id="popupPriority" class="priority-badge hidden"></span><h1 id="title"></h1><p id="note"></p><button id="reminderImageButton" class="reminder-image-button hidden" type="button" aria-label="查看提醒图片大图"><img id="reminderImage" class="reminder-image" alt="提醒附图" /></button></div>
       <div class="actions"><button id="completeButton" class="primary">✓ 完成</button><button id="laterButton" title="选择延后提醒的时间">未完成</button></div>
       <button id="editButton" class="link">添加备注或修改提醒事项</button>
       <small class="repeat-note">直接关闭后，1 分钟后会再次提醒</small>
@@ -38,6 +38,10 @@
       <div class="actions small"><button id="editBack">取消</button><button id="saveEdit" class="dark">保存更改</button></div>
     </section>
   </main>
+  <div id="imageViewerOverlay" class="popup-image-viewer hidden" role="dialog" aria-modal="true" aria-label="查看提醒图片">
+    <button id="imageViewerClose" type="button" aria-label="关闭图片查看">×</button>
+    <img id="imageViewerContent" alt="提醒图片大图" />
+  </div>
   <script src="tauri-bridge.js"></script>
   <script src="time-controls.js"></script>
   <script src="popup.js"></script>

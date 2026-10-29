@@ -206,7 +206,16 @@ function render() {
   if (!items.length) {
     $("#reminderList").innerHTML = `<div class="empty-state"><span class="empty-bell">${reminderIcon}</span><strong>${currentView === "pending" ? "现在没有待提醒事项" : "还没有完成的事项"}</strong><span>${currentView === "pending" ? "可以放心去做眼前的事。" : "完成一个提醒后会出现在这里。"}</span></div>`; return;
   }
-  $("#reminderList").innerHTML = items.map((item) => `<div class="reminder-row ${item.status === "done" ? "is-done" : ""}" data-id="${item.id}"><button class="check-button" aria-label="${escapeHtml(item.status === "done" ? "重新启用提醒：" + item.title : "完成提醒：" + item.title)}" data-action="toggle">${item.status === "done" ? "✓" : ""}</button><button class="reminder-copy" data-action="edit"><strong>${escapeHtml(item.title)}</strong>${priorityMarkup(item)}${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}</button>${isSupportedImageData(item.imageData) ? `<img class="reminder-thumbnail" src="${escapeHtml(item.imageData)}" alt="" />` : ""}<button class="reminder-time" data-action="edit">${item.status === "done" ? "已完成" : formatDue(item.dueAt)} <span>›</span></button></div>`).join("");
+  $("#reminderList").innerHTML = items.map((item) => `<div class="reminder-row ${item.status === "done" ? "is-done" : ""}" data-id="${item.id}"><button class="check-button" aria-label="${escapeHtml(item.status === "done" ? "重新启用提醒：" + item.title : "完成提醒：" + item.title)}" data-action="toggle">${item.status === "done" ? "✓" : ""}</button><button class="reminder-copy" data-action="edit"><strong>${escapeHtml(item.title)}</strong>${priorityMarkup(item)}${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}</button>${isSupportedImageData(item.imageData) ? `<button class="reminder-thumbnail-button" type="button" data-action="view-image" aria-label="查看提醒图片：${escapeHtml(item.title)}"><img class="reminder-thumbnail" src="${escapeHtml(item.imageData)}" alt="" /></button>` : ""}<button class="reminder-time" data-action="edit">${item.status === "done" ? "已完成" : formatDue(item.dueAt)} <span>›</span></button></div>`).join("");
+}
+function openImageViewer(imageData) {
+  if (!isSupportedImageData(imageData)) return;
+  $("#imageViewerContent").src = imageData;
+  $("#imageViewerOverlay").classList.remove("hidden");
+}
+function closeImageViewer() {
+  $("#imageViewerOverlay").classList.add("hidden");
+  $("#imageViewerContent").removeAttribute("src");
 }
 function openEditor(item = null) {
   $("#priorityInput").value = item?.priority || "";
@@ -240,12 +249,14 @@ $("#importFile").addEventListener("change", async (event) => { const [file] = ev
 $$('[data-close="editor"]').forEach((button) => button.addEventListener("click", () => closeDialog("editor")));
 $$('[data-close="settings"]').forEach((button) => button.addEventListener("click", () => closeDialog("settings")));
 $$('[data-close="batch"]').forEach((button) => button.addEventListener("click", () => closeDialog("batch")));
+$("#imageViewerOverlay").addEventListener("click", (event) => { if (event.target === event.currentTarget || event.target.closest('[data-close="imageViewer"]')) closeImageViewer(); });
 $$(".dialog-overlay").forEach((overlay) => overlay.addEventListener("mousedown", (event) => { if (event.target === overlay) overlay.classList.add("hidden"); }));
 $$(".segmented button").forEach((button) => button.addEventListener("click", () => { currentView = button.dataset.view; render(); }));
 $("#reminderList").addEventListener("click", async (event) => {
   const row = event.target.closest(".reminder-row"), action = event.target.closest("button")?.dataset.action;
   if (!row || !action) return; const item = state.reminders.find((entry) => entry.id === row.dataset.id);
   if (action === "edit") openEditor(item);
+  if (action === "view-image") { openImageViewer(item.imageData); return; }
   if (action === "toggle") {
     if (row.classList.contains("completing") || row.classList.contains("restoring")) return;
     if (item.status === "pending") {

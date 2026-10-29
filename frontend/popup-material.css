@@ -11,6 +11,12 @@ body { padding: 0; color: var(--md-on-surface); font-family: var(--popup-font, v
 .popup h2 { margin: 0 0 12px; color: var(--md-on-surface); font-size: calc(17px * var(--text-scale,1)); line-height: 1.4; }
 .popup p { min-height: 0; margin: 0; color: var(--popup-secondary, var(--md-on-surface-variant)); font-size: calc(14px * var(--text-scale,1)); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .popup .reminder-image { width: 100%; max-height: 150px; margin-top: 10px; display: block; border-radius: 10px; object-fit: contain; background: var(--md-surface-container); }
+.popup .reminder-image-button { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
+.popup .reminder-image-button:focus-visible { outline: var(--md-focus); outline-offset: -3px; }
+.popup-image-viewer { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 44px 12px 12px; background: var(--md-surface-lowest); border: var(--md-border); border-radius: var(--md-radius-surface); }
+.popup-image-viewer img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.popup-image-viewer button { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border: 0; border-radius: var(--md-radius-control); background: var(--md-surface-container); color: var(--md-on-surface); font-size: 22px; cursor: pointer; }
+.popup-image-viewer button:focus-visible { outline: var(--md-focus); outline-offset: -3px; }
 .popup button { font-family: inherit; font-size: calc(14px * var(--text-scale,1)); }
 .popup button:disabled { cursor: default; }
 .actions { gap: 8px; margin-top: 16px; }

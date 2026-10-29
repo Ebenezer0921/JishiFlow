@@ -69,6 +69,8 @@
 .app-shell .reminder-copy strong { color: var(--md-on-surface); font-size: var(--md-body-large); line-height: 24px; overflow-wrap: anywhere; }
 .app-shell .reminder-copy small, .app-shell .reminder-time { color: var(--md-on-surface-variant); font-size: var(--md-label); line-height: 20px; }
 .app-shell .reminder-thumbnail { width: 48px; height: 48px; display: block; border-radius: var(--md-radius-small); object-fit: cover; background: var(--md-surface-container); }
+.app-shell .reminder-thumbnail-button { width: 48px; height: 48px; padding: 0; border: 0; border-radius: var(--md-radius-small); background: transparent; cursor: zoom-in; }
+.app-shell .reminder-thumbnail-button:focus-visible { outline: var(--md-focus); outline-offset: var(--md-focus-offset); }
 .app-shell .is-done .check-button, .app-shell .reminder-row.completing .check-button { background: transparent; border-color: transparent; }
 .app-shell .is-done .check-button::before, .app-shell .reminder-row.completing .check-button::before { background: var(--md-success); border-color: var(--md-success); }
 .app-shell .is-done .reminder-copy strong { color: var(--md-on-surface-variant); }
