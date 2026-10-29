@@ -3,7 +3,9 @@ body.has-open-dialog { overflow: hidden; }
 .image-viewer-overlay { z-index: 40; }
 .image-viewer-dialog { position: relative; display: grid; place-items: center; width: min(960px, 100%); height: min(760px, calc(100dvh - 48px)); padding: 48px 16px 16px; border-radius: var(--md-radius-surface); background: var(--md-surface-lowest); box-shadow: var(--md-shadow-overlay); }
 .image-viewer-dialog img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
-.image-viewer-close { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; border: 0; border-radius: var(--md-radius-control); background: var(--md-surface-container); color: var(--md-on-surface); font-size: 24px; cursor: pointer; }
+.image-viewer-close { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--md-radius-control); background: var(--md-surface-container); color: var(--md-on-surface); cursor: pointer; }
+.image-viewer-close svg { display: block; }
+.editor-draft-status { color: var(--md-primary) !important; }
 .image-viewer-close:focus-visible { outline: var(--md-focus); outline-offset: var(--md-focus-offset); }
 .dialog-overlay {
   padding: var(--md-space-6);

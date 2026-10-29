@@ -1,6 +1,6 @@
 [package]
 name = "jishi-reminder"
-version = "2.3.2"
+version = "2.3.3"
 description = "及时提醒 Windows 本地桌面版"
 authors = ["Jishi"]
 edition = "2021"

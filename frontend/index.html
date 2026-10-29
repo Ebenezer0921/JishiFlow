@@ -31,12 +31,12 @@
   </main>
   <div id="imageViewerOverlay" class="dialog-overlay image-viewer-overlay hidden">
     <section class="image-viewer-dialog" role="dialog" aria-modal="true" aria-label="查看提醒图片">
-      <button type="button" class="image-viewer-close" data-close="imageViewer" aria-label="关闭图片查看">×</button>
+      <button type="button" class="image-viewer-close" data-close="imageViewer" aria-label="关闭图片查看"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" /></svg></button>
       <img id="imageViewerContent" alt="提醒图片大图" />
     </section>
   </div>
   <div id="editorOverlay" class="dialog-overlay hidden">
-    <section class="apple-dialog" role="dialog" aria-modal="true" aria-labelledby="editorTitle"><div class="dialog-top"><div><h2 id="editorTitle">新建提醒</h2><p>设置好时间后，及时会按你设置的位置提醒。</p></div><button class="dialog-close" aria-label="关闭提醒编辑窗口" data-close="editor">×</button></div>
+    <section class="apple-dialog" role="dialog" aria-modal="true" aria-labelledby="editorTitle"><div class="dialog-top"><div><h2 id="editorTitle">新建提醒</h2><p>设置好时间后，及时会按你设置的位置提醒。</p><p id="editorDraftStatus" class="editor-draft-status hidden" role="status">未保存内容已暂存，下次新建时会恢复。</p></div><button class="dialog-close" aria-label="关闭提醒编辑窗口" data-close="editor">×</button></div>
       <form id="reminderForm" class="reminder-form">
         <label>提醒事项<input id="titleInput" required maxlength="120" placeholder="要提醒我什么？" /></label>
         <label>提醒时间<input id="dueInput" required type="datetime-local" /></label>
@@ -49,7 +49,7 @@
           <div id="imagePreview" class="image-preview hidden"><img id="imagePreviewContent" alt="提醒图片预览" /><div><button id="replaceImageButton" type="button">更换图片</button><button id="removeImageButton" type="button">移除</button></div></div>
           <span id="imageStatus" class="image-status" role="status"></span>
         </section>
-        <div class="form-actions"><button id="deleteButton" type="button" class="delete-button">删除</button><span></span><button type="button" class="cancel-button" data-close="editor">取消</button><button type="submit" class="save-button">保存</button></div>
+        <div class="form-actions"><button id="deleteButton" type="button" class="delete-button">删除</button><span></span><button type="button" class="cancel-button" data-close="editor">关闭</button><button type="submit" class="save-button">保存</button></div>
       </form>
     </section>
   </div>
@@ -78,8 +78,8 @@
         <div class="setting-row transfer-row"><div><strong>备份与迁移</strong><small>用通用 JSON 文件导出或导入提醒事项</small><span id="transferStatus" class="transfer-status" role="status">导入时会与本机提醒合并，不会覆盖现有事项</span></div><div class="transfer-actions"><button id="exportButton" class="setting-button">导出</button><button id="importButton" class="setting-button">导入</button><input id="importFile" class="hidden" type="file" accept=".json,application/json" /></div></div>
         <div class="setting-row"><div><strong>测试提醒</strong><small>立即在所选区域预览提醒弹窗</small></div><button id="testReminderButton" class="setting-button">测试</button></div>
         <h3 class="settings-section-title">关于软件</h3>
-        <div class="setting-row"><div><strong>当前版本</strong><small>及时提醒 Windows 桌面版</small></div><span class="version-number">2.3.2</span></div>
-        <details class="release-notes"><summary>查看更新日志</summary><div class="release-notes-content"><p><strong>2.3.2 · 2026-10-29</strong><br />设置中新增版本与更新日志；修正 Windows 便携版缺少运行文件的问题。</p><p><strong>2.3.1 · 2026-10-29</strong><br />提醒图片支持点击放大查看。</p><p><strong>2.3.0 · 2026-10-29</strong><br />新增优先级、时间滚轮和提醒卡片间距设置。</p><p><strong>2.2.0 · 2026-10-26</strong><br />新增提醒图片附件，支持粘贴、拖入和本地备份。</p><p><strong>2.1.1 · 2026-10-26</strong><br />修复搜索结果的待办和完成排序。</p></div></details>
+        <div class="setting-row"><div><strong>当前版本</strong><small>及时提醒 Windows 桌面版</small></div><span class="version-number">2.3.3</span></div>
+        <details class="release-notes"><summary>查看更新日志</summary><div class="release-notes-content"><p><strong>2.3.3 · 2026-10-29</strong><br />修正图片查看关闭按钮居中；新建提醒支持未保存草稿恢复，点击框外不再关闭。</p><p><strong>2.3.2 · 2026-10-29</strong><br />设置中新增版本与更新日志；修正 Windows 便携版缺少运行文件的问题。</p><p><strong>2.3.1 · 2026-10-29</strong><br />提醒图片支持点击放大查看。</p><p><strong>2.3.0 · 2026-10-29</strong><br />新增优先级、时间滚轮和提醒卡片间距设置。</p><p><strong>2.2.0 · 2026-10-26</strong><br />新增提醒图片附件，支持粘贴、拖入和本地备份。</p><p><strong>2.1.1 · 2026-10-26</strong><br />修复搜索结果的待办和完成排序。</p></div></details>
       </div><p class="settings-footnote">关闭窗口后仍会在系统托盘继续提醒；要完全退出，请右键托盘图标并选择“退出”。所有数据仅保存在本机。</p></div>
     </section>
   </div>

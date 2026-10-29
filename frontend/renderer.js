@@ -3,6 +3,30 @@ let currentView = "pending";
 let editingId = null;
 let batchRows = [];
 let editorImageData = "";
+const editorDraftKey = "jishi-reminder-new-draft-v1";
+let editorDefaultDue = "";
+let draftTimer = null;
+function readEditorDraft() {
+  try { const draft = JSON.parse(localStorage.getItem(editorDraftKey) || "null"); return draft && typeof draft === "object" ? draft : null; }
+  catch { return null; }
+}
+function saveEditorDraft() {
+  clearTimeout(draftTimer);
+  if (editingId || $("#editorOverlay").classList.contains("hidden")) return;
+  const draft = { title: $("#titleInput").value, dueAt: $("#dueInput").value, priority: $("#priorityInput").value, note: $("#noteInput").value, imageData: editorImageData };
+  const hasChanges = !!(draft.title || draft.note || draft.priority || draft.imageData || draft.dueAt !== editorDefaultDue);
+  try {
+    if (hasChanges) localStorage.setItem(editorDraftKey, JSON.stringify(draft));
+    else localStorage.removeItem(editorDraftKey);
+    $("#editorDraftStatus").classList.toggle("hidden", !hasChanges);
+    $("#editorDraftStatus").textContent = "未保存内容已暂存，下次新建时会恢复。";
+  } catch {
+    $("#editorDraftStatus").classList.remove("hidden");
+    $("#editorDraftStatus").textContent = "暂存失败，请检查本机可用空间。";
+  }
+}
+function queueEditorDraft() { clearTimeout(draftTimer); draftTimer = setTimeout(saveEditorDraft, 250); }
+window.addEventListener("beforeunload", saveEditorDraft);
 const priorityNames = { urgent: "紧急", medium: "中等", normal: "一般" };
 const priorityRank = { urgent: 0, medium: 1, normal: 2 };
 function priorityMarkup(item) { return state.settings.priorityEnabled !== false && priorityNames[item.priority] ? '<span class="priority-badge priority-' + item.priority + '">' + priorityNames[item.priority] + '</span>' : ''; }
@@ -56,6 +80,7 @@ async function setEditorImage(file) {
   try {
     editorImageData = await encodeReminderImage(file);
     renderEditorImage();
+    saveEditorDraft();
     status.textContent = "图片已添加，仅保存在本机并随备份导出";
   } catch (error) {
     status.textContent = error.message || "图片处理失败";
@@ -218,14 +243,18 @@ function closeImageViewer() {
   $("#imageViewerContent").removeAttribute("src");
 }
 function openEditor(item = null) {
+  const draft = item ? null : readEditorDraft();
   $("#priorityInput").value = item?.priority || "";
   editingId = item?.id || null; $("#editorTitle").textContent = item ? "编辑提醒" : "新建提醒";
-  $("#titleInput").value = item?.title || ""; $("#noteInput").value = item?.note || "";
-  editorImageData = isSupportedImageData(item?.imageData) ? item.imageData : ""; $("#imageStatus").textContent = ""; renderEditorImage();
-  $("#dueInput").value = toLocalInput(item ? new Date(item.dueAt) : new Date(Date.now() + 30 * 60000)); $("#dueInput").min = toLocalInput(new Date());
+  $("#titleInput").value = item?.title || draft?.title || ""; $("#noteInput").value = item?.note || draft?.note || "";
+  $("#priorityInput").value = item?.priority || draft?.priority || "";
+  editorImageData = isSupportedImageData(item?.imageData || draft?.imageData) ? (item?.imageData || draft?.imageData) : ""; $("#imageStatus").textContent = ""; renderEditorImage();
+  editorDefaultDue = toLocalInput(new Date(Date.now() + 30 * 60000));
+  $("#dueInput").value = item ? toLocalInput(new Date(item.dueAt)) : (draft?.dueAt || editorDefaultDue); $("#dueInput").min = toLocalInput(new Date());
+  $("#editorDraftStatus").classList.toggle("hidden", !draft || !!item);
   $("#deleteButton").classList.toggle("hidden", !item); $("#editorOverlay").classList.remove("hidden"); setTimeout(() => $("#titleInput").focus(), 50);
 }
-function closeDialog(name) { $(`#${name}Overlay`).classList.add("hidden"); }
+function closeDialog(name) { if (name === "editor") saveEditorDraft(); $(`#${name}Overlay`).classList.add("hidden"); }
 $("#newButton").addEventListener("click", () => openEditor());
 $("#batchButton").addEventListener("click", () => { $("#batchOverlay").classList.remove("hidden"); refreshBatchPreview(); setTimeout(() => $("#batchInput").focus(), 50); });
 $("#settingsButton").addEventListener("click", () => $("#settingsOverlay").classList.remove("hidden"));
@@ -236,7 +265,11 @@ $("#searchResults").addEventListener("click", (event) => { const result = event.
 document.addEventListener("mousedown", (event) => { if (!event.target.closest(".reminder-search")) $("#searchResults").classList.add("hidden"); });
 $("#imageDropZone").addEventListener("click", () => $("#imageInput").click());
 $("#replaceImageButton").addEventListener("click", () => $("#imageInput").click());
-$("#removeImageButton").addEventListener("click", () => { editorImageData = ""; $("#imageStatus").textContent = "图片已移除，保存后生效"; renderEditorImage(); });
+$("#removeImageButton").addEventListener("click", () => { editorImageData = ""; $("#imageStatus").textContent = "图片已移除，保存后生效"; renderEditorImage(); saveEditorDraft(); });
+for (const id of ["titleInput", "dueInput", "priorityInput", "noteInput"]) {
+  $("#" + id).addEventListener("input", queueEditorDraft);
+  $("#" + id).addEventListener("change", saveEditorDraft);
+}
 $("#imageInput").addEventListener("change", async (event) => { const [file] = event.target.files; if (file) await setEditorImage(file); event.target.value = ""; });
 $("#imageDropZone").addEventListener("dragover", (event) => { event.preventDefault(); event.currentTarget.classList.add("is-dragging"); });
 $("#imageDropZone").addEventListener("dragleave", (event) => event.currentTarget.classList.remove("is-dragging"));
@@ -250,7 +283,7 @@ $$('[data-close="editor"]').forEach((button) => button.addEventListener("click",
 $$('[data-close="settings"]').forEach((button) => button.addEventListener("click", () => closeDialog("settings")));
 $$('[data-close="batch"]').forEach((button) => button.addEventListener("click", () => closeDialog("batch")));
 $("#imageViewerOverlay").addEventListener("click", (event) => { if (event.target === event.currentTarget || event.target.closest('[data-close="imageViewer"]')) closeImageViewer(); });
-$$(".dialog-overlay").forEach((overlay) => overlay.addEventListener("mousedown", (event) => { if (event.target === overlay) overlay.classList.add("hidden"); }));
+$$(".dialog-overlay").forEach((overlay) => overlay.addEventListener("mousedown", (event) => { if (event.target === overlay && overlay.id !== "editorOverlay") overlay.classList.add("hidden"); }));
 $$(".segmented button").forEach((button) => button.addEventListener("click", () => { currentView = button.dataset.view; render(); }));
 $("#reminderList").addEventListener("click", async (event) => {
   const row = event.target.closest(".reminder-row"), action = event.target.closest("button")?.dataset.action;
@@ -276,7 +309,7 @@ $("#reminderList").addEventListener("click", async (event) => {
 $("#reminderForm").addEventListener("submit", async (event) => {
   event.preventDefault(); const record = { title: $("#titleInput").value.trim(), note: $("#noteInput").value.trim(), imageData: editorImageData, priority: $("#priorityInput").value, dueAt: new Date($("#dueInput").value).toISOString() };
   if (!record.title) return; if (editingId) Object.assign(state.reminders.find((item) => item.id === editingId), record); else state.reminders.push({ id: crypto.randomUUID(), ...record, status: "pending" });
-  currentView = "pending"; await persist(); closeDialog("editor");
+  currentView = "pending"; await persist(); closeDialog("editor"); if (!editingId) localStorage.removeItem(editorDraftKey);
 });
 $("#deleteButton").addEventListener("click", async () => { if (!editingId) return; state.reminders = state.reminders.filter((item) => item.id !== editingId); await persist(); closeDialog("editor"); });
 $("#snoozeInput").addEventListener("change", async (event) => { state.settings.defaultSnooze = Math.max(1, Math.min(525600, Math.round(Number(event.target.value) || 1))); await persist(); });
