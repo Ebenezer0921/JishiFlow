@@ -51,9 +51,12 @@
       const value = encode(values);
       const previous = input.value;
       syncing = true; input.value = value;
-      if(!input.value || !input.validity.valid) { input.value = previous; syncing = false; sync(); wrapper.classList.add('has-error'); message.textContent='日期时间超出允许范围，请选择未来时间'; return false; }
+      const validity = input.validity;
+      if(!input.value || validity.badInput || validity.stepMismatch || validity.rangeOverflow || validity.customError) { input.value = previous; syncing = false; sync(); wrapper.classList.add('has-error'); message.textContent='日期时间无效，请重新选择'; return false; }
       input.setCustomValidity(''); syncing = false; sync();
-      wrapper.classList.remove('has-error'); message.textContent=''; fields.forEach(field=>field.removeAttribute('aria-invalid'));
+      wrapper.classList.toggle('has-error', validity.rangeUnderflow);
+      message.textContent = validity.rangeUnderflow ? '提醒时间已过，请继续调整到未来时间' : '';
+      fields.forEach(field=>field.removeAttribute('aria-invalid'));
       input.dispatchEvent(new Event('input', {bubbles:true})); input.dispatchEvent(new Event('change', {bubbles:true})); return true;
     }
     function typed() {

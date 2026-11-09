@@ -19,7 +19,7 @@ use tauri_plugin_autostart::ManagerExt;
 use windows_sys::Win32::{
     Foundation::{POINT, RECT},
     Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST},
-    UI::WindowsAndMessaging::{GetCursorPos, ShowWindow, SW_SHOWNOACTIVATE},
+    UI::WindowsAndMessaging::{GetCursorPos, SetWindowPos, ShowWindow, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_SHOWNOACTIVATE},
 };
 
 const VALID_POSITIONS: [&str; 9] = [
@@ -343,7 +343,11 @@ fn show_popup(app: &AppHandle, reminder: Reminder) -> Result<(), String> {
 
 fn show_popup_without_activation(window: &WebviewWindow) -> Result<(), String> {
     let hwnd = window.hwnd().map_err(|error| error.to_string())?;
-    unsafe { ShowWindow(hwnd.0 as _, SW_SHOWNOACTIVATE); }
+    unsafe {
+        ShowWindow(hwnd.0 as _, SW_SHOWNOACTIVATE);
+        SetWindowPos(hwnd.0 as _, HWND_TOP, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
     Ok(())
 }
 
@@ -393,6 +397,7 @@ fn state_save(app: AppHandle, state: PersistedState) -> Result<PersistedState, S
         for label in labels {
             if let Some(window) = app.get_webview_window(&label) {
                 let _ = window.set_always_on_top(saved.settings.popup_always_on_top);
+                let _ = show_popup_without_activation(&window);
             }
         }
     }
