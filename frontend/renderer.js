@@ -210,6 +210,8 @@ function render() {
   const items = state.reminders.filter((item) => item.status === currentView).sort((a, b) => (state.settings.prioritySort ? (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) : 0) || Date.parse(a.dueAt) - Date.parse(b.dueAt));
   $("#listTitle").textContent = currentView === "pending" ? "接下来" : "已完成";
   $("#itemCount").textContent = items.length; $("#snoozeInput").value = state.settings.defaultSnooze;
+  $("#collapseMinutesInput").value = state.settings.collapseMinutes ?? 10;
+  $("#popupAlwaysOnTopInput").checked = state.settings.popupAlwaysOnTop !== false;
   $("#tomorrowReminderTime").value = state.settings.tomorrowReminderTime || "09:00";
   $("#popupGap").value = state.settings.popupGap ?? 12;
   $("#popupMargin").value = state.settings.popupMargin ?? 20;
@@ -313,6 +315,8 @@ $("#reminderForm").addEventListener("submit", async (event) => {
 });
 $("#deleteButton").addEventListener("click", async () => { if (!editingId) return; state.reminders = state.reminders.filter((item) => item.id !== editingId); await persist(); closeDialog("editor"); });
 $("#snoozeInput").addEventListener("change", async (event) => { state.settings.defaultSnooze = Math.max(1, Math.min(525600, Math.round(Number(event.target.value) || 1))); await persist(); });
+$("#collapseMinutesInput").addEventListener("change", async (event) => { state.settings.collapseMinutes = Math.max(1, Math.min(1440, Math.round(Number(event.target.value) || 10))); await persist(); });
+$("#popupAlwaysOnTopInput").addEventListener("change", async (event) => { state.settings.popupAlwaysOnTop = event.target.checked; await persist(); });
 $("#positionGrid").addEventListener("click", async (event) => { const button = event.target.closest("button[data-position]"); if (!button) return; state.settings.popupPosition = button.dataset.position; await persist(); await window.jishi.previewReminder(); });
 $("#popupSizeInput").addEventListener("input", (event) => { $("#popupSizeName").textContent = sizeNames[Number(event.target.value)]; });
 $("#popupSizeInput").addEventListener("change", async (event) => { state.settings.popupSize = Number(event.target.value); await persist(); await window.jishi.previewReminder(); });

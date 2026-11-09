@@ -19,7 +19,7 @@ use tauri_plugin_autostart::ManagerExt;
 use windows_sys::Win32::{
     Foundation::{POINT, RECT},
     Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST},
-    UI::WindowsAndMessaging::GetCursorPos,
+    UI::WindowsAndMessaging::{GetCursorPos, ShowWindow, SW_SHOWNOACTIVATE},
 };
 
 const VALID_POSITIONS: [&str; 9] = [
@@ -71,6 +71,10 @@ struct Settings {
     popup_gap: u16,
     #[serde(default = "default_popup_margin")]
     popup_margin: u16,
+    #[serde(default = "default_collapse_minutes")]
+    collapse_minutes: i64,
+    #[serde(default = "default_popup_always_on_top")]
+    popup_always_on_top: bool,
     #[serde(default = "default_priority_enabled")]
     priority_enabled: bool,
     #[serde(default)]
@@ -81,7 +85,7 @@ struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { default_snooze: default_snooze(), popup_position: default_position(), popup_size: default_popup_size(), text_size: default_text_size(), popup_font: default_popup_font(), popup_transparency: 0, search_scope: default_search_scope(), search_highlight_seconds: default_search_highlight_seconds(), preview_seconds: default_preview_seconds(), tomorrow_reminder_time: default_tomorrow_time(), popup_gap: default_popup_gap(), popup_margin: default_popup_margin(), priority_enabled: true, priority_sort: false, priority_palette: String::new() }
+        Self { default_snooze: default_snooze(), popup_position: default_position(), popup_size: default_popup_size(), text_size: default_text_size(), popup_font: default_popup_font(), popup_transparency: 0, search_scope: default_search_scope(), search_highlight_seconds: default_search_highlight_seconds(), preview_seconds: default_preview_seconds(), tomorrow_reminder_time: default_tomorrow_time(), popup_gap: default_popup_gap(), popup_margin: default_popup_margin(), collapse_minutes: default_collapse_minutes(), popup_always_on_top: default_popup_always_on_top(), priority_enabled: true, priority_sort: false, priority_palette: String::new() }
     }
 }
 
@@ -108,11 +112,14 @@ struct ActivePopup {
 struct RuntimeState {
     active: Mutex<HashMap<String, ActivePopup>>,
     cooldowns: Mutex<HashMap<String, Instant>>,
+    collapsed_until: Mutex<Option<Instant>>,
 }
 
 fn default_tomorrow_time() -> String { "09:00".into() }
 fn default_popup_gap() -> u16 { 12 }
 fn default_popup_margin() -> u16 { 20 }
+fn default_collapse_minutes() -> i64 { 10 }
+fn default_popup_always_on_top() -> bool { true }
 fn default_priority_enabled() -> bool { true }
 fn valid_clock(value: &str) -> bool {
     let b = value.as_bytes();
@@ -132,6 +139,7 @@ fn sanitize(mut value: PersistedState) -> PersistedState {
     if !["", "muted"].contains(&value.settings.priority_palette.as_str()) { value.settings.priority_palette.clear(); }
     value.settings.popup_gap = value.settings.popup_gap.min(64);
     value.settings.popup_margin = value.settings.popup_margin.min(120);
+    value.settings.collapse_minutes = value.settings.collapse_minutes.clamp(1, 1440);
     if !valid_clock(&value.settings.tomorrow_reminder_time) { value.settings.tomorrow_reminder_time = default_tomorrow_time(); }
     value.settings.default_snooze = value.settings.default_snooze.clamp(1, 525_600);
     value.settings.popup_size = value.settings.popup_size.clamp(1, 5);
@@ -289,9 +297,13 @@ fn popup_stack_offset(anchor: &str, previous_heights: i32, first_height: i32, he
 }
 
 fn show_popup(app: &AppHandle, reminder: Reminder) -> Result<(), String> {
+    if !reminder.id.starts_with("__preview__") && !reminder.id.starts_with("__test__")
+        && app.state::<RuntimeState>().collapsed_until.lock().map(|until| until.is_some_and(|value| value > Instant::now())).unwrap_or(false) {
+        return Ok(());
+    }
     let label = popup_label(&reminder);
     if let Some(window) = app.get_webview_window(&label) {
-        let _ = window.show();
+        show_popup_without_activation(&window)?;
         return Ok(());
     }
     let state = load_from_disk(app);
@@ -312,7 +324,8 @@ fn show_popup(app: &AppHandle, reminder: Reminder) -> Result<(), String> {
         .decorations(false)
         .transparent(true)
         .shadow(false)
-        .always_on_top(true)
+        .always_on_top(state.settings.popup_always_on_top)
+        .focused(false)
         .skip_taskbar(true)
         .resizable(false)
         .visible(false)
@@ -324,7 +337,23 @@ fn show_popup(app: &AppHandle, reminder: Reminder) -> Result<(), String> {
     let _ = window.set_zoom(scale);
     let _ = window.set_icon(tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")).map_err(|error| error.to_string())?);
     reflow_popup_group(app, &anchor, area);
-    window.show().map_err(|e| e.to_string())?;
+    show_popup_without_activation(&window)?;
+    Ok(())
+}
+
+fn show_popup_without_activation(window: &WebviewWindow) -> Result<(), String> {
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+    unsafe { ShowWindow(hwnd.0 as _, SW_SHOWNOACTIVATE); }
+    Ok(())
+}
+
+fn collapse_all_popups(app: &AppHandle) -> Result<(), String> {
+    let minutes = load_from_disk(app).settings.collapse_minutes;
+    let until = Instant::now() + Duration::from_secs((minutes as u64) * 60);
+    *app.state::<RuntimeState>().collapsed_until.lock().map_err(|error| error.to_string())? = Some(until);
+    let labels = app.state::<RuntimeState>().active.lock().map_err(|error| error.to_string())?
+        .keys().cloned().collect::<Vec<_>>();
+    for label in labels { hide_popup(app, &label); }
     Ok(())
 }
 
@@ -359,6 +388,14 @@ fn state_load(app: AppHandle) -> PersistedState { load_from_disk(&app) }
 fn state_save(app: AppHandle, state: PersistedState) -> Result<PersistedState, String> {
     let before = load_from_disk(&app).settings;
     let saved = save_to_disk(&app, state)?;
+    if before.popup_always_on_top != saved.settings.popup_always_on_top {
+        let labels = app.state::<RuntimeState>().active.lock().map(|active| active.keys().cloned().collect::<Vec<_>>()).unwrap_or_default();
+        for label in labels {
+            if let Some(window) = app.get_webview_window(&label) {
+                let _ = window.set_always_on_top(saved.settings.popup_always_on_top);
+            }
+        }
+    }
     if before.popup_gap != saved.settings.popup_gap || before.popup_margin != saved.settings.popup_margin {
         let mut groups = app.state::<RuntimeState>().active.lock().map(|active| active.values()
             .filter(|item| !item.moved_by_user).map(|item| (item.anchor.clone(), item.area)).collect::<Vec<_>>()).unwrap_or_default();
@@ -375,6 +412,9 @@ fn popup_get(window: WebviewWindow, runtime: State<'_, RuntimeState>) -> Option<
 
 #[tauri::command]
 fn popup_close(app: AppHandle, window: WebviewWindow) { dismiss_popup(&app, window.label()); }
+
+#[tauri::command]
+fn popup_collapse_all(app: AppHandle) -> Result<(), String> { collapse_all_popups(&app) }
 
 #[tauri::command]
 fn popup_complete(app: AppHandle, window: WebviewWindow, id: String) -> Result<PersistedState, String> {
@@ -478,6 +518,8 @@ mod popup_layout_tests {
         assert_eq!(value.settings.tomorrow_reminder_time, "09:00");
         assert_eq!(value.settings.popup_gap, 12);
         assert_eq!(value.settings.popup_margin, 20);
+        assert_eq!(value.settings.collapse_minutes, 10);
+        assert!(value.settings.popup_always_on_top);
         assert!(value.settings.priority_enabled);
         assert!(!value.settings.priority_sort);
     }
@@ -488,6 +530,8 @@ mod popup_layout_tests {
         value.settings.tomorrow_reminder_time = "23:59".into();
         value.settings.popup_gap = 0;
         value.settings.popup_margin = 120;
+        value.settings.collapse_minutes = 45;
+        value.settings.popup_always_on_top = false;
         value.reminders.push(fixture("bottom-right", [0,0,1920,1040], 0).reminder);
         value.reminders[0].priority = "urgent".into();
         let text = serde_json::to_string(&value).unwrap();
@@ -496,14 +540,19 @@ mod popup_layout_tests {
         assert_eq!(saved.settings.tomorrow_reminder_time, "23:59");
         assert_eq!(saved.settings.popup_gap, 0);
         assert_eq!(saved.settings.popup_margin, 120);
+        assert_eq!(saved.settings.collapse_minutes, 45);
+        assert!(!saved.settings.popup_always_on_top);
         saved.settings.tomorrow_reminder_time = "24:00".into();
         saved.settings.popup_gap = 999;
         saved.settings.popup_margin = 999;
+        saved.settings.collapse_minutes = 0;
         saved.reminders[0].priority = "invalid".into();
         let safe = sanitize(saved);
         assert_eq!(safe.settings.tomorrow_reminder_time, "09:00");
         assert_eq!(safe.settings.popup_gap, 64);
         assert_eq!(safe.settings.popup_margin, 120);
+        assert_eq!(safe.settings.collapse_minutes, 1);
+        assert!(!safe.settings.popup_always_on_top);
         assert_eq!(safe.reminders[0].priority, "");
         assert!(!valid_clock("苹方"));
     }
@@ -621,6 +670,10 @@ fn popup_start_drag(app: AppHandle, window: WebviewWindow) -> Result<(), String>
 }
 
 fn dispatch_due_reminders(app: &AppHandle) {
+        if let Ok(mut collapsed) = app.state::<RuntimeState>().collapsed_until.lock() {
+            if collapsed.is_some_and(|until| until > Instant::now()) { return; }
+            *collapsed = None;
+        }
         let state = load_from_disk(app);
         let now = Utc::now();
         let now_instant = Instant::now();
@@ -658,7 +711,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .invoke_handler(tauri::generate_handler![
-            state_load, state_save, popup_get, popup_close, popup_complete, popup_disable, popup_snooze,
+            state_load, state_save, popup_get, popup_close, popup_collapse_all, popup_complete, popup_disable, popup_snooze,
             popup_update, window_show, popup_test, popup_preview, popup_resize, popup_start_drag
         ])
         .setup(|app| {
@@ -666,10 +719,11 @@ pub fn run() {
                 window.set_icon(tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?)?;
             }
             let open_item = MenuItemBuilder::with_id("open", "打开及时提醒").build(app)?;
+            let collapse_item = MenuItemBuilder::with_id("collapse_all", "收起全部提醒（按设置时间）").build(app)?;
             let enabled = app.autolaunch().is_enabled().unwrap_or(false);
             let autostart_item = CheckMenuItemBuilder::with_id("autostart", "开机自动启动").checked(enabled).build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "退出").build(app)?;
-            let menu = MenuBuilder::new(app).items(&[&open_item, &autostart_item, &quit_item]).build()?;
+            let menu = MenuBuilder::new(app).items(&[&open_item, &collapse_item, &autostart_item, &quit_item]).build()?;
             let autostart_for_menu = autostart_item.clone();
             TrayIconBuilder::new()
                 .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?)
@@ -678,6 +732,7 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(move |app, event| match event.id().as_ref() {
                     "open" => show_main(app),
+                    "collapse_all" => { let _ = collapse_all_popups(app); }
                     "autostart" => {
                         if autostart_for_menu.is_checked().unwrap_or(false) { let _ = app.autolaunch().enable(); }
                         else { let _ = app.autolaunch().disable(); }

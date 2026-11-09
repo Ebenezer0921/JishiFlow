@@ -12,7 +12,7 @@ function applyAppearance(value) {
   document.documentElement.style.setProperty("--popup-secondary", Number(value.popupTransparency) > 0 ? 'var(--md-on-surface)' : 'var(--md-on-surface-variant)');
 }
 function startPreviewCountdown(seconds) {
-  ['completeButton', 'laterButton', 'editButton'].forEach((id) => { $(`#${id}`).disabled = true; });
+  ['completeButton', 'laterButton', 'editButton', 'collapseAllButton'].forEach((id) => { $(`#${id}`).disabled = true; });
   $('.repeat-note').textContent = '外观预览，不会创建或修改提醒';
   $('#closeButton').setAttribute('aria-label', '关闭外观预览');
   $('#closeButton').title = '关闭外观预览';
@@ -71,6 +71,7 @@ function render(item) {
 }
 $("#dragHandle").addEventListener("mousedown", (event) => { if (event.button === 0 && !event.target.closest("button")) window.jishi.startPopupDrag(); });
 $("#closeButton").addEventListener("click", () => window.jishi.closePopup());
+$("#collapseAllButton").addEventListener("click", () => window.jishi.collapseAllPopups());
 let imageViewerOpener = null;
 function closeImageViewer() {
   $("#imageViewerOverlay").classList.add("hidden");
@@ -99,7 +100,7 @@ $("#editButton").addEventListener("click", () => { $("#editTitle").value = remin
 $("#editBack").addEventListener("click", () => show("viewPanel"));
 $("#saveEdit").addEventListener("click", async () => { const title = $("#editTitle").value.trim(); if (!title) return; const note = $("#editNote").value.trim(), priority = $("#editPriority").value; await window.jishi.updateFromPopup(reminder.id, title, note, priority); reminder = { ...reminder, title, note, priority }; render(reminder); show("viewPanel"); });
 window.jishi.onPopupChanged((item) => { render(item); show("viewPanel"); });
-Promise.all([window.jishi.getPopupReminder(), window.jishi.loadState()]).then(([item, state]) => { settings = state.settings; applyAppearance(settings); render(item); if (item?.id?.startsWith("__preview__")) startPreviewCountdown(settings.previewSeconds); fitPopup(); });
+Promise.all([window.jishi.getPopupReminder(), window.jishi.loadState()]).then(([item, state]) => { settings = state.settings; applyAppearance(settings); $("#collapseAllButton").textContent = `全部收起 · ${settings.collapseMinutes || 10} 分钟`; render(item); if (item?.id?.startsWith("__preview__")) startPreviewCountdown(settings.previewSeconds); fitPopup(); });
 new ResizeObserver(fitPopup).observe(document.querySelector(".popup"));
 window.addEventListener('resize', fitPopup);
 document.addEventListener('keydown', event => { if(event.key === 'Escape' && !$("#imageViewerOverlay").classList.contains('hidden')) { event.preventDefault(); closeImageViewer(); return; } if(event.key === 'Escape' && !snoozeBusy && $("#viewPanel").classList.contains('hidden')) { event.preventDefault(); show('viewPanel'); } });
@@ -120,4 +121,4 @@ function resetTomorrow() { $("#snoozeError").textContent = ""; $("#tomorrowTime"
 $("#tomorrowTime").addEventListener("change", updateTomorrowLabel);
 $("#adjustTomorrow").addEventListener("click", () => { const expanded = $("#tomorrowOptions").classList.toggle("hidden") === false; $("#adjustTomorrow").setAttribute("aria-expanded",String(expanded)); if(expanded) $("#tomorrowTime").focus(); fitPopup(); });
 $("#tomorrowButton").addEventListener("click", () => { if (!$("#tomorrowTime").reportValidity()) return; performSnooze(window.JishiTime.tomorrow(new Date(), $("#tomorrowTime").value)); });
-window.jishi.onStateChanged(state => { settings = state.settings; document.body.dataset.priorityPalette = settings.priorityPalette || ""; if(reminder) render(state.reminders.find(item=>item.id===reminder.id) || reminder); });
+window.jishi.onStateChanged(state => { settings = state.settings; document.body.dataset.priorityPalette = settings.priorityPalette || ""; $("#collapseAllButton").textContent = `全部收起 · ${settings.collapseMinutes || 10} 分钟`; if(reminder) render(state.reminders.find(item=>item.id===reminder.id) || reminder); });

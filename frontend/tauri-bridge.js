@@ -8,6 +8,7 @@
     getPopupReminder: () => invoke("popup_get"),
     onPopupChanged: (callback) => { listen("popup-changed", (event) => callback(event.payload)); },
     closePopup: () => invoke("popup_close"),
+    collapseAllPopups: () => invoke("popup_collapse_all"),
     completeReminder: (id) => invoke("popup_complete", { id }),
     disableReminder: (id) => invoke("popup_disable", { id }),
     snoozeReminder: (id, dueAt) => invoke("popup_snooze", { id, dueAt }),
