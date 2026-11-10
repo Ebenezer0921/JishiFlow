@@ -50,13 +50,22 @@ check('HTML keeps old control IDs and has no duplicate IDs',()=>{
   for(const asset of [...html.matchAll(/(?:src|href)="([^"#]+\.(?:js|css))"/g)].map(m=>m[1]))assert(fs.existsSync(path.join(root,'frontend',asset)),asset);
  }
 });
-check('long content contributes hidden height while resize requests stay bounded and coalesced',()=>{
+check('popup fits intrinsic content once, ignores height feedback and still follows width changes',()=>{
  const popup=fs.readFileSync(path.join(root,'frontend/popup.js'),'utf8');
  const geometry=popup.slice(popup.indexOf('let fitFrame'),popup.indexOf('function show('));
- const frames=[],requests=[],content={scrollHeight:500,clientHeight:60};
- const section={scrollHeight:180,getBoundingClientRect:()=>({height:180}),classList:{contains:()=>false},querySelector:()=>content};
- const card={children:[section]}; const ctx={window:{innerWidth:206,jishi:{resizePopup:h=>{requests.push(h);return Promise.resolve();}}},document:{querySelector:()=>card},getComputedStyle:el=>el===card?{paddingTop:'14',paddingBottom:'14',rowGap:'12'}:{marginTop:'0',marginBottom:'0'},requestAnimationFrame:fn=>{frames.push(fn);return frames.length;}};
- vm.createContext(ctx);vm.runInContext(geometry,ctx);vm.runInContext('fitPopup();fitPopup()',ctx);assert.equal(frames.length,1);frames.shift()();assert.deepEqual(requests,[430]);vm.runInContext('fitPopup()',ctx);frames.shift()();assert.equal(requests.length,1);
+ const frames=[],requests=[];let intrinsicHeight=260, viewportHeight=220;
+ const card={style:{maxHeight:''},getBoundingClientRect(){return {height:this.style.maxHeight==='none'?intrinsicHeight:Math.min(intrinsicHeight,viewportHeight)};}};
+ const ctx={window:{innerWidth:396,jishi:{resizePopup:h=>{requests.push(h);viewportHeight=h;ctx.fitPopupOnResize();return Promise.resolve();}}},document:{querySelector:()=>card},requestAnimationFrame:fn=>{frames.push(fn);return frames.length;}};
+ vm.createContext(ctx);vm.runInContext(geometry,ctx);
+ ctx.fitPopup();ctx.fitPopup();assert.equal(frames.length,1);frames.shift()();
+ assert.deepEqual(requests,[260]);assert.equal(card.style.maxHeight,'');assert.equal(frames.length,0);
+ for(let i=0;i<100;i++){viewportHeight=220+i;ctx.fitPopupOnResize();}assert.equal(frames.length,0);
+ intrinsicHeight=900;ctx.fitPopup();frames.shift()();assert.equal(requests.at(-1),430);
+ intrinsicHeight=240;ctx.fitPopup();frames.shift()();assert.equal(requests.at(-1),240);
+ ctx.fitPopup();frames.shift()();assert.equal(requests.length,3);
+ ctx.window.innerWidth=264;ctx.fitPopupOnResize();frames.shift()();assert.equal(requests.at(-1),360);
+ intrinsicHeight=10;ctx.fitPopup();frames.shift()();assert.equal(requests.at(-1),220);
+ assert(!popup.includes('new ResizeObserver(fitPopup)'));
 });
 (async()=>{
  const renderer=fs.readFileSync(path.join(root,'frontend/renderer.js'),'utf8');

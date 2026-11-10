@@ -31,17 +31,15 @@ function fitPopup() {
   fitFrame = requestAnimationFrame(() => {
     fitFrame = null;
     const card = document.querySelector('.popup');
-    const style = getComputedStyle(card);
-    const number = (value) => parseFloat(value) || 0;
-    const children = [...card.children].filter((child) => !child.classList.contains('hidden'));
-    const naturalHeight = number(style.paddingTop) + number(style.paddingBottom) + number(style.borderTopWidth) + number(style.borderBottomWidth)
-      + Math.max(0, children.length - 1) * number(style.rowGap)
-      + children.reduce((sum, child) => {
-        const childStyle = getComputedStyle(child);
-        const content = child.querySelector?.('.reminder-content');
-        const hiddenContent = content ? Math.max(0, content.scrollHeight - content.clientHeight) : 0;
-        return sum + Math.max(child.scrollHeight, child.getBoundingClientRect().height) + hiddenContent + number(childStyle.marginTop) + number(childStyle.marginBottom);
-      }, 0);
+    // Measure intrinsic content, not the viewport-constrained flex layout being resized.
+    const previousMaxHeight = card.style.maxHeight;
+    let naturalHeight;
+    try {
+      card.style.maxHeight = 'none';
+      naturalHeight = card.getBoundingClientRect().height;
+    } finally {
+      card.style.maxHeight = previousMaxHeight;
+    }
     // Rust keeps width=396*scale and height=clamp(request,220,430)*scale in physical pixels.
     // The measured viewport width accounts for the actual DPI and native WebView zoom.
     const requested = Math.max(220, Math.min(430, Math.ceil(naturalHeight * 396 / Math.max(1, window.innerWidth))));
@@ -49,6 +47,12 @@ function fitPopup() {
     lastRequestedHeight = requested;
     window.jishi.resizePopup(requested).catch(() => { lastRequestedHeight = null; });
   });
+}
+let lastViewportWidth = window.innerWidth;
+function fitPopupOnResize() {
+  if (window.innerWidth === lastViewportWidth) return;
+  lastViewportWidth = window.innerWidth;
+  fitPopup();
 }
 function show(panel) { ["viewPanel", "snoozePanel", "editPanel"].forEach((id) => $(`#${id}`).classList.toggle("hidden", id !== panel)); $(`#${panel}`).scrollTop = 0; const focus = panel === "editPanel" ? $("#editTitle") : panel === "snoozePanel" ? $("#defaultButton") : $(".reminder-content"); focus.focus({preventScroll:true}); fitPopup(); }
 function render(item) {
@@ -101,8 +105,7 @@ $("#editBack").addEventListener("click", () => show("viewPanel"));
 $("#saveEdit").addEventListener("click", async () => { const title = $("#editTitle").value.trim(); if (!title) return; const note = $("#editNote").value.trim(), priority = $("#editPriority").value; await window.jishi.updateFromPopup(reminder.id, title, note, priority); reminder = { ...reminder, title, note, priority }; render(reminder); show("viewPanel"); });
 window.jishi.onPopupChanged((item) => { render(item); show("viewPanel"); });
 Promise.all([window.jishi.getPopupReminder(), window.jishi.loadState()]).then(([item, state]) => { settings = state.settings; applyAppearance(settings); $("#collapseAllButton").textContent = `全部收起 · ${settings.collapseMinutes || 10} 分钟`; render(item); if (item?.id?.startsWith("__preview__")) startPreviewCountdown(settings.previewSeconds); fitPopup(); });
-new ResizeObserver(fitPopup).observe(document.querySelector(".popup"));
-window.addEventListener('resize', fitPopup);
+window.addEventListener('resize', fitPopupOnResize);
 document.addEventListener('keydown', event => { if(event.key === 'Escape' && !$("#imageViewerOverlay").classList.contains('hidden')) { event.preventDefault(); closeImageViewer(); return; } if(event.key === 'Escape' && !snoozeBusy && $("#viewPanel").classList.contains('hidden')) { event.preventDefault(); show('viewPanel'); } });
 
 let snoozeBusy = false;
