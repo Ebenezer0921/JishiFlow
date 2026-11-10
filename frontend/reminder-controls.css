@@ -25,6 +25,10 @@
 .control-error:empty { display: none; }
 .time-error { display: block; color: var(--md-error); font-size: 12px; line-height: 18px; font-weight: 400; }
 .time-error:empty { display: none; }
+/* Keep wheel targets still when draft and validation messages change. */
+#editorDraftStatus { block-size: 44px; overflow: auto; }
+#editorDraftStatus.hidden { display: block !important; visibility: hidden; }
+#editorOverlay .time-error { display: block; block-size: 36px; margin: 0; overflow: auto; }
 #tomorrowOptions { margin: 4px 0 8px; }
 .hidden { display: none !important; }
 .segmented-time input.time-segment, .segmented-time input.native-time-backing { min-height: 0; }
