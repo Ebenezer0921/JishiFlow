@@ -75,7 +75,7 @@ function render(item) {
 }
 $("#dragHandle").addEventListener("mousedown", (event) => { if (event.button === 0 && !event.target.closest("button")) window.jishi.startPopupDrag(); });
 $("#closeButton").addEventListener("click", () => window.jishi.closePopup());
-$("#collapseAllButton").addEventListener("click", () => window.jishi.collapseAllPopups());
+$("#collapseAllButton").addEventListener("click", () => runPopupAction(() => window.jishi.collapseAllPopups()));
 let imageViewerOpener = null;
 function closeImageViewer() {
   $("#imageViewerOverlay").classList.add("hidden");
@@ -94,30 +94,47 @@ $("#reminderImageButton").addEventListener("click", () => {
 });
 $("#imageViewerClose").addEventListener("click", closeImageViewer);
 $("#imageViewerOverlay").addEventListener("click", (event) => { if (event.target === event.currentTarget) closeImageViewer(); });
-$("#completeButton").addEventListener("click", () => window.jishi.completeReminder(reminder.id));
+$("#completeButton").addEventListener("click", () => runPopupAction(() => window.jishi.completeReminder(reminder.id)));
 $("#laterButton").addEventListener("click", () => { resetTomorrow(); $("#defaultButton").textContent = `默认 · ${settings.defaultSnooze} 分钟后`; $("#customTime").value = toLocalInput(new Date(Date.now() + settings.defaultSnooze * 60000)); $("#customTime").min = toLocalInput(new Date()); show("snoozePanel"); });
 $("#defaultButton").addEventListener("click", () => performSnooze(new Date(Date.now() + settings.defaultSnooze * 60000)));
 $("#customButton").addEventListener("click", () => { if ($("#customTime").reportValidity() && $("#customTime").value) performSnooze(new Date($("#customTime").value)); });
-$("#disableButton").addEventListener("click", () => window.jishi.disableReminder(reminder.id));
+$("#disableButton").addEventListener("click", () => runPopupAction(() => window.jishi.disableReminder(reminder.id)));
 $("#snoozeBack").addEventListener("click", () => show("viewPanel"));
 $("#editButton").addEventListener("click", () => { $("#editTitle").value = reminder.title; $("#editNote").value = reminder.note || ""; $("#editPriority").value = reminder.priority || ""; $("#editPriorityField").classList.toggle("hidden", settings.priorityEnabled === false); show("editPanel"); });
 $("#editBack").addEventListener("click", () => show("viewPanel"));
-$("#saveEdit").addEventListener("click", async () => { const title = $("#editTitle").value.trim(); if (!title) return; const note = $("#editNote").value.trim(), priority = $("#editPriority").value; await window.jishi.updateFromPopup(reminder.id, title, note, priority); reminder = { ...reminder, title, note, priority }; render(reminder); show("viewPanel"); });
+$("#saveEdit").addEventListener("click", async () => { if (popupBusy) return; const title = $("#editTitle").value.trim(); if (!title) return; const note = $("#editNote").value.trim(), priority = $("#editPriority").value; if (!await runPopupAction(() => window.jishi.updateFromPopup(reminder.id, title, note, priority))) return; reminder = { ...reminder, title, note, priority }; render(reminder); show("viewPanel"); });
 window.jishi.onPopupChanged((item) => { render(item); show("viewPanel"); });
 Promise.all([window.jishi.getPopupReminder(), window.jishi.loadState()]).then(([item, state]) => { settings = state.settings; applyAppearance(settings); $("#collapseAllButton").textContent = `全部收起 · ${settings.collapseMinutes || 10} 分钟`; render(item); if (item?.id?.startsWith("__preview__")) startPreviewCountdown(settings.previewSeconds); fitPopup(); });
 window.addEventListener('resize', fitPopupOnResize);
-document.addEventListener('keydown', event => { if(event.key === 'Escape' && !$("#imageViewerOverlay").classList.contains('hidden')) { event.preventDefault(); closeImageViewer(); return; } if(event.key === 'Escape' && !snoozeBusy && $("#viewPanel").classList.contains('hidden')) { event.preventDefault(); show('viewPanel'); } });
+document.addEventListener('keydown', event => { if(event.key === 'Escape' && !$("#imageViewerOverlay").classList.contains('hidden')) { event.preventDefault(); closeImageViewer(); return; } if(event.key === 'Escape' && !popupBusy && $("#viewPanel").classList.contains('hidden')) { event.preventDefault(); show('viewPanel'); } });
 
-let snoozeBusy = false;
+let popupBusy = false;
+async function runPopupAction(action) {
+  if (popupBusy || !reminder) return false;
+  popupBusy = true;
+  const focused = document.activeElement;
+  const error = $('#popupError');
+  error.classList.add('hidden');
+  const controls = [...document.querySelectorAll('.popup button, .popup input, .popup textarea, .popup select')]
+    .map(control => [control, control.disabled]);
+  controls.forEach(([control]) => { control.disabled = true; });
+  try { await action(); return true; }
+  catch (_) {
+    error.textContent = '未能确认操作成功，请重试。';
+    error.classList.remove('hidden');
+    return false;
+  } finally {
+    controls.forEach(([control, disabled]) => { control.disabled = disabled; });
+    popupBusy = false;
+    if (focused?.isConnected && !focused.disabled) focused.focus({ preventScroll: true });
+    fitPopup();
+  }
+}
 async function performSnooze(due) {
-  if (snoozeBusy || !reminder) return;
-  const error = $("#snoozeError"); error.textContent = "";
-  if (!Number.isFinite(due.getTime()) || due.getTime() <= Date.now()) { error.textContent = "请选择未来的提醒时间"; return; }
-  snoozeBusy = true;
-  const buttons = [...$("#snoozePanel").querySelectorAll("button")]; buttons.forEach(button => button.disabled = true);
-  try { await window.jishi.snoozeReminder(reminder.id, due.toISOString()); }
-  catch (_) { error.textContent = "未能保存提醒时间，请重试。事项仍然保留。"; }
-  finally { snoozeBusy = false; buttons.forEach(button => button.disabled = false); }
+  if (popupBusy || !reminder) return;
+  const error = $('#snoozeError'); error.textContent = '';
+  if (!Number.isFinite(due.getTime()) || due.getTime() <= Date.now()) { error.textContent = '请选择未来的提醒时间'; return; }
+  await runPopupAction(() => window.jishi.snoozeReminder(reminder.id, due.toISOString()));
 }
 function updateTomorrowLabel() { $("#tomorrowButton").textContent = "明天 " + ($("#tomorrowTime").value || settings.tomorrowReminderTime || "09:00") + " 提醒"; fitPopup(); }
 function resetTomorrow() { $("#snoozeError").textContent = ""; $("#tomorrowTime").value = settings.tomorrowReminderTime || "09:00"; $("#tomorrowOptions").classList.add("hidden"); $("#adjustTomorrow").setAttribute("aria-expanded","false"); updateTomorrowLabel(); }

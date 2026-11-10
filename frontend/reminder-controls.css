@@ -43,3 +43,4 @@
 #viewPanel > .actions { margin-top: 8px; }
 #viewPanel > .link { min-height: 30px; margin-top: 4px; padding: 4px; }
 #viewPanel > .repeat-note { margin-top: 0; }
+.save-error { position: fixed; inset: auto 24px 20px; z-index: 1000; margin: 0; padding: 12px 16px; border: 1px solid var(--md-error); border-radius: var(--md-radius-control); background: var(--md-surface-lowest); color: var(--md-error); font: 14px var(--md-font); pointer-events: none; }

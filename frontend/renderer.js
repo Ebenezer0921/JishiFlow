@@ -163,7 +163,32 @@ function refreshBatchPreview() {
   $("#createBatchButton").disabled = ready === 0 || (past > 0 && !$("#pastConfirm").checked);
   $("#createBatchButton").textContent = ready ? `创建 ${ready} 条提醒` : "创建提醒";
 }
-async function persist() { state = await window.jishi.saveState(state); render(); }
+let saveBusy = false;
+let lastSavedState = null;
+async function persist() {
+  if (saveBusy) return false;
+  saveBusy = true;
+  const focused = document.activeElement;
+  const controls = $$('button, input, textarea, select').map(control => [control, control.disabled]);
+  const error = $('#saveError');
+  error.classList.add('hidden');
+  controls.forEach(([control]) => { control.disabled = true; });
+  try {
+    state = await window.jishi.saveState(state);
+    lastSavedState = JSON.parse(JSON.stringify(state));
+    return true;
+  } catch (_) {
+    if (lastSavedState) state = JSON.parse(JSON.stringify(lastSavedState));
+    error.textContent = '未能确认保存成功，请重试。';
+    error.classList.remove('hidden');
+    return false;
+  } finally {
+    controls.forEach(([control, disabled]) => { control.disabled = disabled; });
+    saveBusy = false;
+    render();
+    if (focused?.isConnected && !focused.disabled) focused.focus({ preventScroll: true });
+  }
+}
 function setTransferStatus(message, isError = false) {
   const target = $("#transferStatus");
   target.textContent = message;
@@ -181,11 +206,15 @@ function exportReminders() {
   setTransferStatus(`已导出 ${state.reminders.length} 条提醒`);
 }
 async function importReminders(file) {
+  if (saveBusy) return;
   try {
     const parsed = JSON.parse(await file.text());
     const source = Array.isArray(parsed) ? parsed : parsed?.reminders;
     if (!Array.isArray(source)) throw new Error("文件中没有提醒事项列表");
-    const valid = source.filter((item) => item && typeof item.title === "string" && item.title.trim() && !Number.isNaN(Date.parse(item.dueAt)));
+    const valid = source.filter((item) => item && typeof item.title === "string" && item.title.trim()
+      && (item.id == null || typeof item.id === 'string')
+      && typeof item.dueAt === 'string' && Number.isFinite(Date.parse(item.dueAt)));
+    if (saveBusy) return;
     if (!valid.length) throw new Error("没有找到可以导入的提醒事项");
     if (!window.confirm(`确认导入 ${valid.length} 条提醒？\n已有提醒不会被覆盖。`)) return;
     const existingIds = new Set(state.reminders.map((item) => item.id));
@@ -193,11 +222,11 @@ async function importReminders(file) {
     const incoming = valid.flatMap((item) => {
       if (item.id && existingIds.has(item.id)) { skipped += 1; return []; }
       const id = item.id || crypto.randomUUID(); existingIds.add(id);
-      return [{ id, title: item.title.trim(), note: typeof item.note === "string" ? item.note : "", imageData: isSupportedImageData(item.imageData) ? item.imageData : "", priority: priorityNames[item.priority] ? item.priority : "", dueAt: new Date(item.dueAt).toISOString(), status: item.status === "done" ? "done" : "pending", completedAt: item.completedAt || null }];
+      return [{ id, title: item.title.trim(), note: typeof item.note === "string" ? item.note : "", imageData: isSupportedImageData(item.imageData) ? item.imageData : "", priority: Object.keys(priorityNames).includes(item.priority) ? item.priority : "", dueAt: new Date(item.dueAt).toISOString(), status: item.status === "done" ? "done" : "pending", completedAt: typeof item.completedAt === 'string' && Number.isFinite(Date.parse(item.completedAt)) ? item.completedAt : null }];
     });
     state.reminders.push(...incoming);
-    await persist();
-    setTransferStatus(`成功导入 ${incoming.length} 条${skipped ? `，跳过 ${skipped} 条重复事项` : ""}`);
+    if (!await persist()) { setTransferStatus('导入未能确认保存成功，请重试。', true); return; }
+    setTransferStatus(`成功导入 ${incoming.length} 条${skipped ? `，跳过 ${skipped} 条重复事项` : ""}${source.length > valid.length ? `，忽略 ${source.length - valid.length} 条无效事项` : ""}`);
   } catch (error) {
     setTransferStatus(`导入失败：${error.message || "文件格式不正确"}`, true);
   }
@@ -233,7 +262,7 @@ function render() {
   if (!items.length) {
     $("#reminderList").innerHTML = `<div class="empty-state"><span class="empty-bell">${reminderIcon}</span><strong>${currentView === "pending" ? "现在没有待提醒事项" : "还没有完成的事项"}</strong><span>${currentView === "pending" ? "可以放心去做眼前的事。" : "完成一个提醒后会出现在这里。"}</span></div>`; return;
   }
-  $("#reminderList").innerHTML = items.map((item) => `<div class="reminder-row ${item.status === "done" ? "is-done" : ""}" data-id="${item.id}"><button class="check-button" aria-label="${escapeHtml(item.status === "done" ? "重新启用提醒：" + item.title : "完成提醒：" + item.title)}" data-action="toggle">${item.status === "done" ? "✓" : ""}</button><button class="reminder-copy" data-action="edit"><strong>${escapeHtml(item.title)}</strong>${priorityMarkup(item)}${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}</button>${isSupportedImageData(item.imageData) ? `<button class="reminder-thumbnail-button" type="button" data-action="view-image" aria-label="查看提醒图片：${escapeHtml(item.title)}"><img class="reminder-thumbnail" src="${escapeHtml(item.imageData)}" alt="" /></button>` : ""}<button class="reminder-time" data-action="edit">${item.status === "done" ? "已完成" : formatDue(item.dueAt)} <span>›</span></button></div>`).join("");
+  $("#reminderList").innerHTML = items.map((item) => `<div class="reminder-row ${item.status === "done" ? "is-done" : ""}" data-id="${escapeHtml(item.id)}"><button class="check-button" aria-label="${escapeHtml(item.status === "done" ? "重新启用提醒：" + item.title : "完成提醒：" + item.title)}" data-action="toggle">${item.status === "done" ? "✓" : ""}</button><button class="reminder-copy" data-action="edit"><strong>${escapeHtml(item.title)}</strong>${priorityMarkup(item)}${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}</button>${isSupportedImageData(item.imageData) ? `<button class="reminder-thumbnail-button" type="button" data-action="view-image" aria-label="查看提醒图片：${escapeHtml(item.title)}"><img class="reminder-thumbnail" src="${escapeHtml(item.imageData)}" alt="" /></button>` : ""}<button class="reminder-time" data-action="edit">${item.status === "done" ? "已完成" : formatDue(item.dueAt)} <span>›</span></button></div>`).join("");
 }
 function openImageViewer(imageData) {
   if (!isSupportedImageData(imageData)) return;
@@ -256,7 +285,7 @@ function openEditor(item = null) {
   $("#editorDraftStatus").classList.toggle("hidden", !draft || !!item);
   $("#deleteButton").classList.toggle("hidden", !item); $("#editorOverlay").classList.remove("hidden"); setTimeout(() => $("#titleInput").focus(), 50);
 }
-function closeDialog(name) { if (name === "editor") saveEditorDraft(); $(`#${name}Overlay`).classList.add("hidden"); }
+function closeDialog(name) { if (saveBusy) return; if (name === "editor") saveEditorDraft(); $(`#${name}Overlay`).classList.add("hidden"); }
 $("#newButton").addEventListener("click", () => openEditor());
 $("#batchButton").addEventListener("click", () => { $("#batchOverlay").classList.remove("hidden"); refreshBatchPreview(); setTimeout(() => $("#batchInput").focus(), 50); });
 $("#settingsButton").addEventListener("click", () => $("#settingsOverlay").classList.remove("hidden"));
@@ -285,9 +314,10 @@ $$('[data-close="editor"]').forEach((button) => button.addEventListener("click",
 $$('[data-close="settings"]').forEach((button) => button.addEventListener("click", () => closeDialog("settings")));
 $$('[data-close="batch"]').forEach((button) => button.addEventListener("click", () => closeDialog("batch")));
 $("#imageViewerOverlay").addEventListener("click", (event) => { if (event.target === event.currentTarget || event.target.closest('[data-close="imageViewer"]')) closeImageViewer(); });
-$$(".dialog-overlay").forEach((overlay) => overlay.addEventListener("mousedown", (event) => { if (event.target === overlay && overlay.id !== "editorOverlay") overlay.classList.add("hidden"); }));
+$$(".dialog-overlay").forEach((overlay) => overlay.addEventListener("mousedown", (event) => { if (!saveBusy && event.target === overlay && overlay.id !== "editorOverlay") overlay.classList.add("hidden"); }));
 $$(".segmented button").forEach((button) => button.addEventListener("click", () => { currentView = button.dataset.view; render(); }));
 $("#reminderList").addEventListener("click", async (event) => {
+  if (saveBusy) return;
   const row = event.target.closest(".reminder-row"), action = event.target.closest("button")?.dataset.action;
   if (!row || !action) return; const item = state.reminders.find((entry) => entry.id === row.dataset.id);
   if (action === "edit") openEditor(item);
@@ -305,41 +335,42 @@ $("#reminderList").addEventListener("click", async (event) => {
       await new Promise((resolve) => setTimeout(resolve, 520));
       Object.assign(item, { status: "pending", completedAt: null, dueAt: new Date(Date.now() + state.settings.defaultSnooze * 60000).toISOString() });
     }
-    await persist();
+    if (!await persist()) return;
   }
 });
 $("#reminderForm").addEventListener("submit", async (event) => {
-  event.preventDefault(); const record = { title: $("#titleInput").value.trim(), note: $("#noteInput").value.trim(), imageData: editorImageData, priority: $("#priorityInput").value, dueAt: new Date($("#dueInput").value).toISOString() };
+  event.preventDefault(); if (saveBusy) return; const record = { title: $("#titleInput").value.trim(), note: $("#noteInput").value.trim(), imageData: editorImageData, priority: $("#priorityInput").value, dueAt: new Date($("#dueInput").value).toISOString() };
   if (!record.title) return; if (editingId) Object.assign(state.reminders.find((item) => item.id === editingId), record); else state.reminders.push({ id: crypto.randomUUID(), ...record, status: "pending" });
-  currentView = "pending"; await persist(); closeDialog("editor"); if (!editingId) localStorage.removeItem(editorDraftKey);
+  currentView = "pending"; if (!await persist()) return; closeDialog("editor"); if (!editingId) localStorage.removeItem(editorDraftKey);
 });
-$("#deleteButton").addEventListener("click", async () => { if (!editingId) return; state.reminders = state.reminders.filter((item) => item.id !== editingId); await persist(); closeDialog("editor"); });
-$("#snoozeInput").addEventListener("change", async (event) => { state.settings.defaultSnooze = Math.max(1, Math.min(525600, Math.round(Number(event.target.value) || 1))); await persist(); });
-$("#collapseMinutesInput").addEventListener("change", async (event) => { state.settings.collapseMinutes = Math.max(1, Math.min(1440, Math.round(Number(event.target.value) || 10))); await persist(); });
-$("#popupAlwaysOnTopInput").addEventListener("change", async (event) => { state.settings.popupAlwaysOnTop = event.target.checked; await persist(); });
-$("#positionGrid").addEventListener("click", async (event) => { const button = event.target.closest("button[data-position]"); if (!button) return; state.settings.popupPosition = button.dataset.position; await persist(); await window.jishi.previewReminder(); });
+$("#deleteButton").addEventListener("click", async () => { if (saveBusy || !editingId) return; state.reminders = state.reminders.filter((item) => item.id !== editingId); if (!await persist()) return; closeDialog("editor"); });
+$("#snoozeInput").addEventListener("change", async (event) => { state.settings.defaultSnooze = Math.max(1, Math.min(525600, Math.round(Number(event.target.value) || 1))); if (!await persist()) return; });
+$("#collapseMinutesInput").addEventListener("change", async (event) => { state.settings.collapseMinutes = Math.max(1, Math.min(1440, Math.round(Number(event.target.value) || 10))); if (!await persist()) return; });
+$("#popupAlwaysOnTopInput").addEventListener("change", async (event) => { state.settings.popupAlwaysOnTop = event.target.checked; if (!await persist()) return; });
+$("#positionGrid").addEventListener("click", async (event) => { const button = event.target.closest("button[data-position]"); if (!button) return; state.settings.popupPosition = button.dataset.position; if (!await persist()) return; await window.jishi.previewReminder(); });
 $("#popupSizeInput").addEventListener("input", (event) => { $("#popupSizeName").textContent = sizeNames[Number(event.target.value)]; });
-$("#popupSizeInput").addEventListener("change", async (event) => { state.settings.popupSize = Number(event.target.value); await persist(); await window.jishi.previewReminder(); });
+$("#popupSizeInput").addEventListener("change", async (event) => { state.settings.popupSize = Number(event.target.value); if (!await persist()) return; await window.jishi.previewReminder(); });
 $("#textSizeInput").addEventListener("input", (event) => { $("#textSizeName").textContent = sizeNames[Number(event.target.value)]; });
-$("#textSizeInput").addEventListener("change", async (event) => { state.settings.textSize = Number(event.target.value); await persist(); await window.jishi.previewReminder(); });
-$("#popupFontInput").addEventListener("change", async (event) => { state.settings.popupFont = event.target.value; await persist(); await window.jishi.previewReminder(); });
+$("#textSizeInput").addEventListener("change", async (event) => { state.settings.textSize = Number(event.target.value); if (!await persist()) return; await window.jishi.previewReminder(); });
+$("#popupFontInput").addEventListener("change", async (event) => { state.settings.popupFont = event.target.value; if (!await persist()) return; await window.jishi.previewReminder(); });
 $("#popupTransparencyInput").addEventListener("input", (event) => { $("#popupTransparencyName").textContent = `${event.target.value}%`; });
-$("#popupTransparencyInput").addEventListener("change", async (event) => { state.settings.popupTransparency = Number(event.target.value); await persist(); await window.jishi.previewReminder(); });
-$("#searchScopeInput").addEventListener("change", async (event) => { state.settings.searchScope = event.target.value; await persist(); refreshSearchResults(); });
-$("#searchHighlightInput").addEventListener("change", async (event) => { state.settings.searchHighlightSeconds = Math.max(1, Math.min(10, Math.round(Number(event.target.value) || 3))); await persist(); });
-$("#previewSecondsInput").addEventListener("change", async (event) => { state.settings.previewSeconds = Math.max(1, Math.min(30, Math.round(Number(event.target.value) || 5))); await persist(); await window.jishi.previewReminder(); });
+$("#popupTransparencyInput").addEventListener("change", async (event) => { state.settings.popupTransparency = Number(event.target.value); if (!await persist()) return; await window.jishi.previewReminder(); });
+$("#searchScopeInput").addEventListener("change", async (event) => { state.settings.searchScope = event.target.value; if (!await persist()) return; refreshSearchResults(); });
+$("#searchHighlightInput").addEventListener("change", async (event) => { state.settings.searchHighlightSeconds = Math.max(1, Math.min(10, Math.round(Number(event.target.value) || 3))); if (!await persist()) return; });
+$("#previewSecondsInput").addEventListener("change", async (event) => { state.settings.previewSeconds = Math.max(1, Math.min(30, Math.round(Number(event.target.value) || 5))); if (!await persist()) return; await window.jishi.previewReminder(); });
 $("#batchInput").addEventListener("input", refreshBatchPreview);
 $("#pastConfirm").addEventListener("change", refreshBatchPreview);
 $("#createBatchButton").addEventListener("click", async () => {
+  if (saveBusy) return;
   const creatable = batchRows.filter((item) => item.status !== "error");
   if (!creatable.length || (creatable.some((item) => item.status === "past") && !$("#pastConfirm").checked)) return;
   state.reminders.push(...creatable.map((item) => ({ id: crypto.randomUUID(), title: item.title, priority: item.priority || "", note: "", dueAt: item.dueAt, status: "pending" })));
-  currentView = "pending"; await persist(); $("#batchInput").value = ""; refreshBatchPreview(); closeDialog("batch");
+  currentView = "pending"; if (!await persist()) return; $("#batchInput").value = ""; refreshBatchPreview(); closeDialog("batch");
 });
-window.jishi.onStateChanged((next) => { state = next; render(); });
-window.jishi.loadState().then((loaded) => { state = loaded; render(); });
+window.jishi.onStateChanged((next) => { state = next; lastSavedState = JSON.parse(JSON.stringify(next)); render(); });
+window.jishi.loadState().then((loaded) => { state = loaded; lastSavedState = JSON.parse(JSON.stringify(loaded)); render(); });
 
-$("#tomorrowReminderTime").addEventListener("change", async event => { if (!event.target.validity.valid || !event.target.value) return; state.settings.tomorrowReminderTime = event.target.value; await persist(); });
-for (const [id, max] of [["popupGap",64],["popupMargin",120]]) $("#"+id).addEventListener("change", async event => { state.settings[id] = Math.max(0,Math.min(max,Math.round(Number(event.target.value)||0))); await persist(); await window.jishi.previewReminder(); });
-for (const id of ["priorityEnabled","prioritySort"]) $("#"+id).addEventListener("change", async event => { state.settings[id] = event.target.checked; await persist(); });
-$("#priorityPalette").addEventListener("change", async event => { state.settings.priorityPalette = event.target.value; await persist(); });
+$("#tomorrowReminderTime").addEventListener("change", async event => { if (!event.target.validity.valid || !event.target.value) return; state.settings.tomorrowReminderTime = event.target.value; if (!await persist()) return; });
+for (const [id, max] of [["popupGap",64],["popupMargin",120]]) $("#"+id).addEventListener("change", async event => { state.settings[id] = Math.max(0,Math.min(max,Math.round(Number(event.target.value)||0))); if (!await persist()) return; await window.jishi.previewReminder(); });
+for (const id of ["priorityEnabled","prioritySort"]) $("#"+id).addEventListener("change", async event => { state.settings[id] = event.target.checked; if (!await persist()) return; });
+$("#priorityPalette").addEventListener("change", async event => { state.settings.priorityPalette = event.target.value; if (!await persist()) return; });
