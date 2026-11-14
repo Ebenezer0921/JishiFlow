@@ -9,8 +9,8 @@ body.has-open-dialog { overflow: hidden; }
 .image-viewer-close:focus-visible { outline: var(--md-focus); outline-offset: var(--md-focus-offset); }
 .dialog-overlay {
   padding: var(--md-space-6);
-  background: rgb(27 28 32 / 24%);
-  backdrop-filter: blur(4px);
+  background: rgb(0 0 0 / 48%);
+  backdrop-filter: blur(12px);
 }
 .dialog-overlay .apple-dialog {
   width: min(560px, calc(100vw - 48px));
@@ -21,13 +21,19 @@ body.has-open-dialog { overflow: hidden; }
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--md-outline) transparent;
   border: var(--md-border);
-  border-radius: 20px;
+  border-radius: var(--md-radius-surface);
   background: var(--md-surface-lowest);
   color: var(--md-on-surface);
   box-shadow: var(--md-shadow-overlay);
   font-family: var(--md-font);
 }
+.dialog-overlay .apple-dialog::-webkit-scrollbar { width: 8px; }
+.dialog-overlay .apple-dialog::-webkit-scrollbar-track { background: transparent; margin-block: 20px; }
+.dialog-overlay .apple-dialog::-webkit-scrollbar-thumb { border: 2px solid var(--md-surface-lowest); border-radius: 8px; background: var(--md-outline); }
+.dialog-overlay .apple-dialog::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
 .dialog-overlay .dialog-top { gap: var(--md-space-4); }
 .dialog-overlay .dialog-top h2 { margin: 0; font-size: 24px; line-height: 32px; letter-spacing: 0; }
 .dialog-overlay .dialog-top p { margin-top: var(--md-space-2); color: var(--md-on-surface-variant); font-size: var(--md-body-medium); line-height: 22px; }
@@ -63,7 +69,7 @@ body.has-open-dialog { overflow: hidden; }
 .dialog-overlay .form-actions > span { display: none; }
 .dialog-overlay .form-actions .cancel-button { margin-left: auto; }
 .dialog-overlay .form-actions button,
-.dialog-overlay .batch-footer button { min-width: 88px; height: 44px; padding-inline: var(--md-space-4); border-radius: var(--md-radius-control); font-size: var(--md-body-medium); font-weight: 600; }
+.dialog-overlay .batch-footer button { min-width: 88px; height: 44px; padding-inline: var(--md-space-4); border-radius: 999px; font-size: var(--md-body-medium); font-weight: 600; }
 .dialog-overlay .save-button { border: 0; background: var(--md-primary); color: var(--md-on-primary); }
 .dialog-overlay .save-button:hover:not(:disabled) { background: var(--md-on-primary-container); }
 .dialog-overlay .cancel-button { border: 1px solid var(--md-outline); background: var(--md-surface-lowest); color: var(--md-primary); }

@@ -33,3 +33,32 @@
   --md-focus: 2px solid var(--md-primary);
   --md-focus-offset: 3px;
 }
+
+/* Main-window theme only: popup.html retains its established tokens and geometry. */
+.emerald-theme {
+  --md-accent: #34d399;
+  --md-on-accent: #052e21;
+  --md-primary: #08744d;
+  --md-primary-container: #d1fae5;
+  --md-on-primary-container: #065f46;
+  --md-surface: #f4f4f5;
+  --md-surface-container: #ececef;
+  --md-on-surface: #18181b;
+  --md-on-surface-variant: #52525b;
+  --md-outline: #85858f;
+  --md-outline-variant: #d4d4d8;
+  --md-quiet: #71717a;
+  --md-font: "Inter", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --md-radius-surface: 24px;
+  --md-radius-control: 16px;
+  --md-radius-region: 40px;
+  --md-glass: rgba(255,255,255,.05);
+  --md-glass-border: 1px solid rgba(255,255,255,.1);
+  --md-shadow-overlay: 0 24px 80px rgb(0 0 0 / 22%);
+  --md-focus: 2px solid var(--md-primary);
+  --blue: var(--md-primary);
+  --font: var(--md-font);
+  font-family: var(--md-font);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+}
