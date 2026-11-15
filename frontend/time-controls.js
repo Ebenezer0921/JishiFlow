@@ -21,7 +21,25 @@
     if (date.getFullYear() < 1 || date.getFullYear() > 9999) return parts;
     return [timeOnly ? year : date.getFullYear(), timeOnly ? month : date.getMonth()+1, timeOnly ? day : date.getDate(), date.getHours(), date.getMinutes()];
   }
-  const api = { tomorrow, shift }; root.JishiTime = api;
+  function parseImportedTimestamp(value) {
+    if (typeof value !== 'string' || !value.trim()) return { ok: false, reason: '时间为空或类型无效' };
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value.trim());
+    if (!match) return { ok: false, reason: '时间格式无效，需含秒及 Z 或 ±HH:mm 时区' };
+    const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+    const offsetHour = Number(match[10] || 0), offsetMinute = Number(match[11] || 0);
+    if (year < 1 || month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59 || offsetHour > 23 || offsetMinute > 59) return { ok: false, reason: '日期、时间或时区范围无效' };
+    const leap = year % 400 === 0 || (year % 4 === 0 && year % 100 !== 0);
+    const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (day < 1 || day > days[month - 1]) return { ok: false, reason: '日期不存在' };
+    const local = new Date(0);
+    local.setUTCFullYear(year, month - 1, day);
+    local.setUTCHours(hour, minute, second, Number((match[7] || '').padEnd(3, '0').slice(0, 3)));
+    const offset = (offsetHour * 60 + offsetMinute) * (match[9] === '-' ? -1 : 1);
+    const date = new Date(local.getTime() - offset * 60000);
+    if (!Number.isFinite(date.getTime()) || date.getUTCFullYear() < 1 || date.getUTCFullYear() > 9999) return { ok: false, reason: '转换后的年份超出支持范围' };
+    return { ok: true, iso: date.toISOString() };
+  }
+  const api = { tomorrow, shift, parseImportedTimestamp }; root.JishiTime = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (!root.document) return;
   const document = root.document;

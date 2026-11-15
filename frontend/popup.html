@@ -12,21 +12,20 @@
 </head>
 <body>
   <main class="popup">
-    <div id="dragHandle" class="top"><img class="logo" src="assets/app-icon.svg" alt="" width="24" height="24" /><strong>及时提醒</strong><span class="now">现在</span><button id="closeButton" aria-label="暂时关闭提醒，1分钟后再次提醒" title="暂时关闭，1分钟后再次提醒">×</button></div>
+    <div id="dragHandle" class="top" tabindex="0" aria-label="提醒标题区域，点击或按回车置前，可拖动"><img class="logo" src="assets/app-icon.svg" alt="" width="24" height="24" /><strong>及时提醒</strong><span class="now">现在</span><button id="closeButton" aria-label="暂时关闭提醒，1分钟后再次提醒" title="暂时关闭，1分钟后再次提醒">×</button></div>
     <div id="previewCountdown" class="preview-countdown hidden"><span></span><em id="previewCountdownText"></em></div>
     <p id="popupError" class="control-error hidden" role="alert"></p>
     <section id="viewPanel">
       <div class="reminder-content" role="region" aria-label="提醒内容，可滚动查看" tabindex="0"><span id="popupPriority" class="priority-badge hidden"></span><h1 id="title"></h1><p id="note"></p><button id="reminderImageButton" class="reminder-image-button hidden" type="button" aria-label="查看提醒图片大图"><img id="reminderImage" class="reminder-image" alt="提醒附图" /></button></div>
-      <div class="actions"><button id="completeButton" class="primary">✓ 完成</button><button id="laterButton" title="选择延后提醒的时间">未完成</button></div>
-      <button id="editButton" class="link">添加备注或修改提醒事项</button>
+      <div class="actions"><button id="completeButton" class="primary">✓ 完成</button><button id="laterButton" title="选择延后提醒的时间">推迟</button><button id="editButton" title="修改提醒事项、备注和优先级">修改</button></div>
       <button id="collapseAllButton" class="collapse-all" type="button">全部收起 · 10 分钟</button>
-      <small class="repeat-note">直接关闭后，1 分钟后会再次提醒</small>
     </section>
     <section id="snoozePanel" class="hidden">
       <h2>选择下次提醒时间</h2>
       <div class="snooze-shortcuts"><button id="defaultButton" class="primary"></button><button id="tomorrowButton">明天 09:00 提醒</button></div>
-      <button id="adjustTomorrow" class="link" aria-expanded="false" aria-controls="tomorrowOptions">调整本次明天提醒时间</button>
-      <div id="tomorrowOptions" class="hidden"><label>本次明天提醒时间<input id="tomorrowTime" type="time" value="09:00" required /></label></div>
+      <!-- Keep control IDs for the existing default-time binding; custom time is the visible override. -->
+      <button id="adjustTomorrow" class="link" aria-expanded="false" aria-controls="tomorrowOptions" hidden>调整本次明天提醒时间</button>
+      <div id="tomorrowOptions" class="hidden" hidden><label>本次明天提醒时间<input id="tomorrowTime" type="time" value="09:00" required /></label></div>
       <p id="snoozeError" class="control-error" role="alert"></p>
       <label>自定义时间<input id="customTime" type="datetime-local" /></label>
       <div class="actions small top-actions"><button id="snoozeBack">返回</button><button id="customButton" class="dark">确认这个时间</button></div>

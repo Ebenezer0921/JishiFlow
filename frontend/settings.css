@@ -17,7 +17,7 @@
 .position-setting > div:first-child { width: 100%; display: grid; gap: 4px; }
 .position-setting strong { font-size: 14px; }
 .position-setting small { color: #6e6e73; font-size: 11.5px; }
-.position-grid { width: 214px; padding: 12px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; border: 1px solid rgba(0, 0, 0, .09); border-radius: 12px; background: #fbfbfd; }
+.position-grid { width: 214px; padding: 12px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; border: 1px solid rgba(0, 0, 0, .09); border-radius: 12px; background: #fbfbfd; }
 .position-grid button { height: 31px; border: 1px solid rgba(0, 0, 0, .09); border-radius: 6px; background: #fff; cursor: pointer; }
 .position-grid button:hover { border-color: #0071e3; }
 .position-grid button.active { border-color: #0071e3; background: #0071e3; box-shadow: 0 3px 9px rgba(0, 113, 227, .2); }

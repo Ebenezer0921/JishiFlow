@@ -16,16 +16,14 @@ use tauri::{
     WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 use tauri_plugin_autostart::ManagerExt;
+mod popup_layout;
 use windows_sys::Win32::{
     Foundation::{POINT, RECT},
     Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST},
     UI::WindowsAndMessaging::{GetCursorPos, SetWindowPos, ShowWindow, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_SHOWNOACTIVATE},
 };
 
-const VALID_POSITIONS: [&str; 9] = [
-    "top-left", "top-center", "top-right", "center-left", "center", "center-right",
-    "bottom-left", "bottom-center", "bottom-right",
-];
+const VALID_POSITIONS: [&str; 4] = ["top-left", "top-right", "bottom-left", "bottom-right"];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,6 +49,8 @@ struct Settings {
     default_snooze: i64,
     #[serde(default = "default_position")]
     popup_position: String,
+    #[serde(default = "default_popup_overflow")]
+    popup_overflow: String,
     #[serde(default = "default_popup_size")]
     popup_size: u8,
     #[serde(default = "default_text_size")]
@@ -85,7 +85,7 @@ struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { default_snooze: default_snooze(), popup_position: default_position(), popup_size: default_popup_size(), text_size: default_text_size(), popup_font: default_popup_font(), popup_transparency: 0, search_scope: default_search_scope(), search_highlight_seconds: default_search_highlight_seconds(), preview_seconds: default_preview_seconds(), tomorrow_reminder_time: default_tomorrow_time(), popup_gap: default_popup_gap(), popup_margin: default_popup_margin(), collapse_minutes: default_collapse_minutes(), popup_always_on_top: default_popup_always_on_top(), priority_enabled: true, priority_sort: false, priority_palette: String::new() }
+        Self { default_snooze: default_snooze(), popup_position: default_position(), popup_overflow: default_popup_overflow(), popup_size: default_popup_size(), text_size: default_text_size(), popup_font: default_popup_font(), popup_transparency: 0, search_scope: default_search_scope(), search_highlight_seconds: default_search_highlight_seconds(), preview_seconds: default_preview_seconds(), tomorrow_reminder_time: default_tomorrow_time(), popup_gap: default_popup_gap(), popup_margin: default_popup_margin(), collapse_minutes: default_collapse_minutes(), popup_always_on_top: default_popup_always_on_top(), priority_enabled: true, priority_sort: false, priority_palette: String::new() }
     }
 }
 
@@ -105,6 +105,7 @@ struct ActivePopup {
     anchor: String,
     area: [i32; 4],
     scale: f64,
+    width: i32,
     height: i32,
 }
 
@@ -128,6 +129,7 @@ fn valid_clock(value: &str) -> bool {
 }
 fn default_snooze() -> i64 { 10 }
 fn default_position() -> String { "bottom-right".into() }
+fn default_popup_overflow() -> String { "smart".into() }
 fn default_popup_size() -> u8 { 3 }
 fn default_text_size() -> u8 { 3 }
 fn default_popup_font() -> String { "system".into() }
@@ -155,6 +157,9 @@ fn sanitize(mut value: PersistedState) -> PersistedState {
     value.settings.preview_seconds = value.settings.preview_seconds.clamp(1, 30);
     if !VALID_POSITIONS.contains(&value.settings.popup_position.as_str()) {
         value.settings.popup_position = default_position();
+    }
+    if !["smart", "overlap"].contains(&value.settings.popup_overflow.as_str()) {
+        value.settings.popup_overflow = default_popup_overflow();
     }
     for reminder in &mut value.reminders {
         if !["", "urgent", "medium", "normal"].contains(&reminder.priority.as_str()) { reminder.priority.clear(); }
@@ -189,10 +194,23 @@ fn load_from_disk(app: &AppHandle) -> PersistedState {
 fn save_to_disk(app: &AppHandle, value: PersistedState) -> Result<PersistedState, String> {
     let safe = sanitize(value);
     let path = data_path(app)?;
-    if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
-    fs::write(&path, serde_json::to_vec_pretty(&safe).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-    app.emit("state-changed", &safe).map_err(|e| e.to_string())?;
+    write_state_file(&path, &serde_json::to_vec_pretty(&safe).map_err(|e| e.to_string())?)?;
+    // Once disk commit succeeds, a notification failure must not report a false save failure.
+    if app.emit("state-changed", &safe).is_err() { eprintln!("state-changed notification failed after disk commit"); }
     Ok(safe)
+}
+
+fn write_state_file(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+    let temp = path.with_extension(format!("{}.{}.tmp", std::process::id(), Utc::now().timestamp_nanos_opt().unwrap_or_default()));
+    let result = (|| {
+        let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+        file.write_all(bytes)?; file.sync_all()?; drop(file);
+        fs::rename(&temp,path)
+    })();
+    if result.is_err() { let _ = fs::remove_file(&temp); }
+    result.map_err(|error: std::io::Error| error.to_string())
 }
 
 fn show_main(app: &AppHandle) {
@@ -240,34 +258,15 @@ fn same_popup_group(item: &ActivePopup, anchor: &str, area: [i32; 4]) -> bool {
 }
 
 fn next_popup_slot(active: &HashMap<String, ActivePopup>, anchor: &str, area: [i32; 4]) -> usize {
-    active.values().filter(|item| same_popup_group(item, anchor, area))
+    active.values().filter(|item| item.anchor == anchor && item.area == area)
         .map(|item| item.slot + 1).max().unwrap_or(0)
 }
 
-fn popup_origin(area: [i32; 4], position: &str, width: i32, height: i32, offset: i32, margin: i32) -> PhysicalPosition<i32> {
-    let [left, top, right, bottom] = area;
-
-    let area_width = right - left;
-    let area_height = bottom - top;
-    let (vertical, horizontal) = if position == "center" {
-        ("center", "center")
-    } else {
-        let mut parts = position.split('-');
-        (parts.next().unwrap_or("bottom"), parts.next().unwrap_or("right"))
-    };
-    let x = match horizontal {
-        "left" => left + margin,
-        "right" => right - width - margin,
-        _ => left + (area_width - width) / 2,
-    };
-    let base_y = match vertical {
-        "top" => top + margin,
-        "bottom" => bottom - height - margin,
-        _ => top + (area_height - height) / 2,
-    };
-    let y = if vertical == "top" { base_y + offset } else { base_y - offset };
-    PhysicalPosition::new(x.clamp(left + margin, (right - width - margin).max(left + margin)),
-        y.clamp(top + margin, (bottom - height - margin).max(top + margin)))
+fn window_area(window: &WebviewWindow, fallback: [i32; 4]) -> [i32; 4] {
+    window.current_monitor().ok().flatten().map(|monitor| {
+        let work = monitor.work_area();
+        [work.position.x, work.position.y, work.position.x + work.size.width as i32, work.position.y + work.size.height as i32]
+    }).unwrap_or(fallback)
 }
 
 fn reflow_popup_group(app: &AppHandle, anchor: &str, area: [i32; 4]) {
@@ -275,25 +274,44 @@ fn reflow_popup_group(app: &AppHandle, anchor: &str, area: [i32; 4]) {
     let mut group = app.state::<RuntimeState>().active.lock().map(|active| active.iter()
         .filter(|(_, item)| same_popup_group(item, anchor, area))
         .map(|(label, item)| (label.clone(), item.clone())).collect::<Vec<_>>()).unwrap_or_default();
-    group.sort_by_key(|(_, item)| item.slot);
+    group.sort_by(|a,b| a.1.slot.cmp(&b.1.slot).then(a.0.cmp(&b.0)));
     let layout = load_from_disk(app).settings;
-    let first_height = group.first().map(|(_, item)| item.height).unwrap_or(0);
-    let mut offset = 0;
-    for (label, item) in group {
+    let sizes: Vec<_> = group.iter().map(|(_,item)| (item.width,item.height)).collect();
+    let header_height = group.iter().map(|(label,item)| (48.0 * item.scale * app.get_webview_window(label).and_then(|window| window.scale_factor().ok()).unwrap_or(1.0)).ceil() as i32).max().unwrap_or(48);
+    let (positions, _) = popup_layout::arrange(area,anchor,&sizes,layout.popup_gap as i32,layout.popup_margin as i32,layout.popup_overflow == "overlap",header_height);
+    for ((label, _), (x,y)) in group.into_iter().zip(positions) {
         if let Some(window) = app.get_webview_window(&label) {
-            let width = (396.0 * item.scale).round() as u32;
-            let _ = window.set_size(Size::Physical(PhysicalSize::new(width, item.height as u32)));
-            let position = popup_origin(area, anchor, width as i32, item.height,
-                popup_stack_offset(anchor, offset, first_height, item.height), layout.popup_margin as i32);
-            let _ = window.set_position(Position::Physical(position));
-            offset += item.height + layout.popup_gap as i32;
+            let position = PhysicalPosition::new(x,y);
+            if window.outer_position().ok() != Some(position) { let _ = window.set_position(Position::Physical(position)); }
         }
     }
 }
 
-fn popup_stack_offset(anchor: &str, previous_heights: i32, first_height: i32, height: i32) -> i32 {
-    if anchor.starts_with("center") { previous_heights + (height - first_height) / 2 }
-    else { previous_heights }
+fn reflow_all_popups(app: &AppHandle, settings: &Settings, reset_manual: bool) {
+    let snapshot = app.state::<RuntimeState>().active.lock().map(|active| active.iter()
+        .map(|(label,item)| (label.clone(),item.clone())).collect::<Vec<_>>()).unwrap_or_default();
+    let mut updates = Vec::new();
+    for (label,item) in snapshot {
+        if let Some(window) = app.get_webview_window(&label) {
+            let area = window_area(&window,item.area);
+            let size = window.outer_size().ok().map(|s|(s.width as i32,s.height as i32)).unwrap_or((item.width,item.height));
+            updates.push((label,area,size));
+        }
+    }
+    let mut groups = Vec::new();
+    if let Ok(mut active) = app.state::<RuntimeState>().active.lock() {
+        for (label,area,(width,height)) in updates {
+            let arrival_slot=active.get(&label).filter(|item| item.area!=area).map(|item| next_popup_slot(&active,&item.anchor,area));
+            if let Some(item) = active.get_mut(&label) {
+                if let Some(slot)=arrival_slot { item.slot=slot; }
+                item.area=area;item.width=width;item.height=height;
+                if reset_manual { item.anchor=settings.popup_position.clone();item.moved_by_user=false; }
+                if !item.moved_by_user { groups.push((item.anchor.clone(),area)); }
+            }
+        }
+    }
+    groups.sort();groups.dedup();
+    for (anchor,area) in groups { reflow_popup_group(app,&anchor,area); }
 }
 
 fn show_popup(app: &AppHandle, reminder: Reminder) -> Result<(), String> {
@@ -316,7 +334,7 @@ fn show_popup(app: &AppHandle, reminder: Reminder) -> Result<(), String> {
         let mut active = runtime.active.lock().map_err(|e| e.to_string())?;
         let slot = next_popup_slot(&active, &anchor, area);
         active.insert(label.clone(), ActivePopup { reminder: reminder.clone(), slot, moved_by_user: false,
-            anchor: anchor.clone(), area, scale, height: (280.0 * scale).round() as i32 });
+            anchor: anchor.clone(), area, scale, width: (396.0 * scale).round() as i32, height: (280.0 * scale).round() as i32 });
     }
     let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("popup.html".into()))
         .title("及时提醒")
@@ -336,6 +354,13 @@ fn show_popup(app: &AppHandle, reminder: Reminder) -> Result<(), String> {
         })?;
     let _ = window.set_zoom(scale);
     let _ = window.set_icon(tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")).map_err(|error| error.to_string())?);
+    if let Ok(size) = window.outer_size() {
+        let (x,y) = popup_layout::clamp(area,(size.width as i32,size.height as i32),(work.left,work.top),state.settings.popup_margin as i32);
+        let _ = window.set_position(Position::Physical(PhysicalPosition::new(x,y)));
+        if let Ok(mut active) = app.state::<RuntimeState>().active.lock() {
+            if let Some(item) = active.get_mut(&label) { item.width=size.width as i32;item.height=size.height as i32; }
+        }
+    }
     reflow_popup_group(app, &anchor, area);
     show_popup_without_activation(&window)?;
     Ok(())
@@ -401,11 +426,10 @@ fn state_save(app: AppHandle, state: PersistedState) -> Result<PersistedState, S
             }
         }
     }
-    if before.popup_gap != saved.settings.popup_gap || before.popup_margin != saved.settings.popup_margin {
-        let mut groups = app.state::<RuntimeState>().active.lock().map(|active| active.values()
-            .filter(|item| !item.moved_by_user).map(|item| (item.anchor.clone(), item.area)).collect::<Vec<_>>()).unwrap_or_default();
-        groups.sort(); groups.dedup();
-        for (anchor, area) in groups { reflow_popup_group(&app, &anchor, area); }
+    let corner_changed = before.popup_position != saved.settings.popup_position;
+    if corner_changed || before.popup_gap != saved.settings.popup_gap || before.popup_margin != saved.settings.popup_margin
+        || before.popup_overflow != saved.settings.popup_overflow {
+        reflow_all_popups(&app,&saved.settings,corner_changed);
     }
     Ok(saved)
 }
@@ -495,10 +519,10 @@ async fn popup_preview(app: AppHandle) -> Result<(), String> {
     app.run_on_main_thread(move || { let _ = show_popup(&handle, reminder); }).map_err(|e| e.to_string())
 }
 
+#[cfg(test)]
 fn clamp_popup_position(position: PhysicalPosition<i32>, width: u32, height: u32, area: RECT) -> PhysicalPosition<i32> {
-    let x = position.x.clamp(area.left + 20, (area.right - width as i32 - 20).max(area.left + 20));
-    let y = position.y.clamp(area.top + 20, (area.bottom - height as i32 - 20).max(area.top + 20));
-    PhysicalPosition::new(x, y)
+    let (x,y)=popup_layout::clamp([area.left,area.top,area.right,area.bottom],(width as i32,height as i32),(position.x,position.y),20);
+    PhysicalPosition::new(x,y)
 }
 
 #[cfg(test)]
@@ -509,7 +533,7 @@ mod popup_layout_tests {
         ActivePopup { reminder: Reminder { id: "layout-test".into(), title: "test".into(), note: String::new(),
             image_data: String::new(), priority: String::new(),
             due_at: "2099-01-01T00:00:00Z".into(), status: "pending".into(), completed_at: None },
-            slot, moved_by_user: false, anchor: anchor.into(), area, scale: 1.0, height: 260 }
+            slot, moved_by_user: false, anchor: anchor.into(), area, scale: 1.0, width: 396, height: 260 }
     }
 
     #[test]
@@ -564,12 +588,11 @@ mod popup_layout_tests {
 
     #[test]
     fn configurable_margin_anchors_to_work_area() {
-        let area = [-1920, 0, 0, 1040];
-        assert_eq!(popup_origin(area, "bottom-left", 396,260,0,0), PhysicalPosition::new(-1920,780));
-        assert_eq!(popup_origin(area, "bottom-left", 396,260,0,36), PhysicalPosition::new(-1884,744));
-        let first = popup_origin(area, "bottom-right",396,260,0,20);
-        let second = popup_origin(area, "bottom-right",396,260,260+4,20);
-        assert_eq!(first.y - (second.y+260),4);
+        let area=[-1920,0,0,1040];
+        assert_eq!(popup_layout::arrange(area,"bottom-left",&[(396,260)],4,0,false,48).0[0],(-1920,780));
+        assert_eq!(popup_layout::arrange(area,"bottom-left",&[(396,260)],4,36,false,48).0[0],(-1884,744));
+        let (p,_)=popup_layout::arrange(area,"bottom-right",&[(396,260);2],4,20,false,48);
+        assert_eq!(p[0].1-(p[1].1+260),4);
     }
 
     #[test]
@@ -596,34 +619,48 @@ mod popup_layout_tests {
         }
         assert_eq!(next_popup_slot(&active, "bottom-right", [-1920, 0, 0, 1040]), 0);
         active.get_mut("existing").unwrap().moved_by_user = true;
-        assert_eq!(next_popup_slot(&active, "bottom-right", area), 0);
+        assert_eq!(next_popup_slot(&active, "bottom-right", area), 1);
     }
 
     #[test]
-    fn all_nine_first_cards_use_their_own_anchor() {
-        let area = [0, 0, 2560, 1400];
+    fn all_four_first_cards_use_their_own_anchor() {
         for anchor in VALID_POSITIONS {
-            let p = popup_origin(area, anchor, 396, 260, 0, 20);
-            let x = if anchor.ends_with("left") { 20 } else if anchor.ends_with("right") { 2144 } else { 1082 };
-            let y = if anchor.starts_with("top") { 20 } else if anchor.starts_with("bottom") { 1120 } else { 570 };
-            assert_eq!(p, PhysicalPosition::new(x, y), "{anchor}");
+            let p=popup_layout::arrange([0,0,2560,1400],anchor,&[(396,260)],12,20,false,48).0[0];
+            assert_eq!(p,(if anchor.ends_with("left"){20}else{2144},if anchor.starts_with("top"){20}else{1120}));
         }
     }
 
     #[test]
     fn same_group_uses_previous_actual_heights_and_gap() {
-        let area = [0, 0, 2560, 1400];
         for anchor in VALID_POSITIONS {
-            let first = popup_origin(area, anchor, 396, 260, 0, 20);
-            let second = popup_origin(area, anchor, 396, 330, popup_stack_offset(anchor, 260 + 12, 260, 330), 20);
-            if anchor.starts_with("top") {
-                assert_eq!(second.y - (first.y + 260), 12);
-            } else if anchor.starts_with("bottom") {
-                assert_eq!(first.y - (second.y + 330), 12);
-            } else {
-                assert_eq!(first.y - (second.y + 330), 12);
+            let (p,_)=popup_layout::arrange([0,0,2560,1400],anchor,&[(396,260),(396,330)],12,20,false,48);
+            if anchor.starts_with("top"){assert_eq!(p[1].1-(p[0].1+260),12);}else{assert_eq!(p[0].1-(p[1].1+330),12);}
+        }
+    }
+
+    #[test]
+    fn legacy_positions_migrate_and_new_overflow_roundtrips() {
+        for old in ["top-center","bottom-center","center-left","center-right","center","invalid"] {
+            let value:PersistedState=serde_json::from_value(serde_json::json!({"settings":{"popupPosition":old}})).unwrap();
+            let saved=sanitize(value);assert_eq!(saved.settings.popup_position,"bottom-right");assert_eq!(saved.settings.popup_overflow,"smart");
+        }
+        for corner in VALID_POSITIONS {
+            for mode in ["smart","overlap"] {
+                let value:PersistedState=serde_json::from_value(serde_json::json!({"settings":{"popupPosition":corner,"popupOverflow":mode}})).unwrap();
+                let saved=sanitize(serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap());
+                assert_eq!(saved.settings.popup_position,corner);assert_eq!(saved.settings.popup_overflow,mode);
             }
         }
+        let mut invalid=PersistedState::default();invalid.settings.popup_overflow="invalid".into();assert_eq!(sanitize(invalid).settings.popup_overflow,"smart");
+    }
+
+    #[test]
+    fn atomic_state_write_replaces_complete_file_and_cleans_failed_temporary_file() {
+        let dir=std::env::temp_dir().join(format!("jishiflow-atomic-test-{}-{}",std::process::id(),Utc::now().timestamp_nanos_opt().unwrap()));
+        fs::create_dir(&dir).unwrap();let path=dir.join("state.json");
+        write_state_file(&path,b"old").unwrap();write_state_file(&path,b"new").unwrap();assert_eq!(fs::read(&path).unwrap(),b"new");
+        assert!(write_state_file(&dir,b"fail").is_err());assert_eq!(fs::read(&path).unwrap(),b"new");
+        assert_eq!(fs::read_dir(&dir).unwrap().count(),1);fs::remove_file(path).unwrap();fs::remove_dir(dir).unwrap();
     }
 
     #[test]
@@ -638,39 +675,49 @@ mod popup_layout_tests {
         let left_monitor = RECT { left: -1920, top: -100, right: 0, bottom: 940 };
         assert_eq!(clamp_popup_position(PhysicalPosition::new(-1900, 100), 396, 430, left_monitor), PhysicalPosition::new(-1900, 100));
         let tiny = RECT { left: 0, top: 0, right: 300, bottom: 200 };
-        assert_eq!(clamp_popup_position(PhysicalPosition::new(-10, -10), 500, 500, tiny), PhysicalPosition::new(20, 20));
+        assert_eq!(clamp_popup_position(PhysicalPosition::new(-10, -10), 500, 500, tiny), PhysicalPosition::new(0, 0));
     }
 }
 
 #[tauri::command]
 fn popup_resize(app: AppHandle, window: WebviewWindow, height: f64) {
     let placement = app.state::<RuntimeState>().active.lock().ok()
-        .and_then(|mut active| active.get_mut(window.label()).map(|item| {
-            item.height = (height.clamp(220.0, 430.0) * item.scale).round() as i32;
-            item.clone()
-        }));
+        .and_then(|active| active.get(window.label()).cloned());
     let scale = placement.as_ref().map(|item| item.scale)
         .unwrap_or_else(|| popup_scale(load_from_disk(&app).settings.popup_size));
     let width = (396.0 * scale).round() as u32;
-    let requested_height = height.clamp(220.0, 430.0);
-    let physical_height = (requested_height * scale).round() as u32;
-    if let Some(item) = placement.filter(|item| !item.moved_by_user) {
-        reflow_popup_group(&app, &item.anchor, item.area);
-    } else {
-        let _ = window.set_size(Size::Physical(PhysicalSize::new(width, physical_height)));
-        if let Ok(position) = window.outer_position() {
-            let position = clamp_popup_position(position, width, physical_height, work_area());
-            let _ = window.set_position(Position::Physical(position));
+    let physical_height = (height.clamp(220.0,430.0) * scale).round() as u32;
+    let requested = PhysicalSize::new(width,physical_height);
+    // Only the explicit size command resizes this window, and only if dimensions changed.
+    if window.inner_size().ok() != Some(requested) { let _ = window.set_size(Size::Physical(requested)); }
+    let actual = window.outer_size().unwrap_or(requested);
+    if let Some(item) = placement {
+        let area = window_area(&window,item.area);
+        if let Ok(mut active) = app.state::<RuntimeState>().active.lock() {
+            if let Some(current)=active.get_mut(window.label()) { current.width=actual.width as i32;current.height=actual.height as i32;current.area=area; }
+        }
+        if !item.moved_by_user { reflow_popup_group(&app,&item.anchor,area); }
+        else if let Ok(position)=window.outer_position() {
+            let margin=load_from_disk(&app).settings.popup_margin as i32;
+            let (x,y)=popup_layout::clamp(area,(actual.width as i32,actual.height as i32),(position.x,position.y),margin);
+            if position != PhysicalPosition::new(x,y) { let _=window.set_position(Position::Physical(PhysicalPosition::new(x,y))); }
         }
     }
 }
 
 #[tauri::command]
+fn popup_raise(window: WebviewWindow) -> Result<(),String> { show_popup_without_activation(&window) }
+
+#[tauri::command]
 fn popup_start_drag(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
-    window.start_dragging().map_err(|error| error.to_string())?;
-    if let Ok(mut active) = app.state::<RuntimeState>().active.lock() {
-        if let Some(item) = active.get_mut(window.label()) { item.moved_by_user = true; }
+    let previous = app.state::<RuntimeState>().active.lock().ok().and_then(|mut active| {
+        active.get_mut(window.label()).map(|item| {let previous=item.clone();item.moved_by_user=true;previous})
+    });
+    if let Err(error)=window.start_dragging() {
+        if let Some(previous)=previous { if let Ok(mut active)=app.state::<RuntimeState>().active.lock() { active.insert(window.label().into(),previous); } }
+        return Err(error.to_string());
     }
+    if let Some(previous)=previous { reflow_popup_group(&app,&previous.anchor,previous.area); }
     Ok(())
 }
 
@@ -717,7 +764,7 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .invoke_handler(tauri::generate_handler![
             state_load, state_save, popup_get, popup_close, popup_collapse_all, popup_complete, popup_disable, popup_snooze,
-            popup_update, window_show, popup_test, popup_preview, popup_resize, popup_start_drag
+            popup_update, window_show, popup_test, popup_preview, popup_resize, popup_start_drag, popup_raise
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -761,6 +808,33 @@ pub fn run() {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
+                }
+            } else if window.label().starts_with("reminder-popup-") {
+                let app=window.app_handle();
+                if matches!(event,tauri::WindowEvent::Destroyed) {
+                    let removed=app.state::<RuntimeState>().active.lock().ok().and_then(|mut active|active.remove(window.label()));
+                    if let Some(item)=removed { reflow_popup_group(app,&item.anchor,item.area); }
+                } else if matches!(event,tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
+                    if let Some(webview)=app.get_webview_window(window.label()) {
+                        let previous=app.state::<RuntimeState>().active.lock().ok().and_then(|active|active.get(window.label()).cloned());
+                        if let Some(previous)=previous {
+                            let area=window_area(&webview,previous.area);
+                            let size=webview.outer_size().ok();
+                            let mut changed=false;
+                            if let Ok(mut active)=app.state::<RuntimeState>().active.lock() {
+                                let arrival_slot=if area!=previous.area { Some(next_popup_slot(&active,&previous.anchor,area)) }else{None};
+                                if let Some(item)=active.get_mut(window.label()) {
+                                    if let Some(slot)=arrival_slot { item.slot=slot; }
+                                    if let Some(size)=size { changed=item.width!=size.width as i32 || item.height!=size.height as i32;item.width=size.width as i32;item.height=size.height as i32; }
+                                    item.area=area;
+                                }
+                            }
+                            if !previous.moved_by_user && (changed || area!=previous.area) {
+                                if area!=previous.area { reflow_popup_group(app,&previous.anchor,previous.area); }
+                                reflow_popup_group(app,&previous.anchor,area);
+                            }
+                        }
+                    }
                 }
             }
         })

@@ -32,6 +32,10 @@ body.has-open-dialog { overflow: hidden; }
 .dialog-overlay .dialog-top h2 { margin: 0; font-size: 24px; line-height: 32px; letter-spacing: 0; }
 .dialog-overlay .dialog-top p { margin-top: var(--md-space-2); color: var(--md-on-surface-variant); font-size: var(--md-body-medium); line-height: 22px; }
 .dialog-overlay .dialog-close { flex-shrink: 0; width: 36px; height: 36px; border-radius: var(--md-radius-control); color: var(--md-on-surface-variant); background: var(--md-surface-container); }
+.dialog-overlay .dialog-close, .image-viewer-close { transition: background-color 160ms ease, color 160ms ease, filter 160ms ease; }
+.dialog-overlay .dialog-close:hover:not(:disabled), .image-viewer-close:hover:not(:disabled) { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+.dialog-overlay .dialog-close:active:not(:disabled), .image-viewer-close:active:not(:disabled) { filter: brightness(.92); }
+@media (prefers-reduced-motion: reduce) { .dialog-overlay .dialog-close, .image-viewer-close { transition: none; } }
 .dialog-overlay button { font-family: inherit; }
 .dialog-overlay button:focus-visible,
 .dialog-overlay input:focus-visible,
@@ -91,9 +95,9 @@ body.has-open-dialog { overflow: hidden; }
 .dialog-overlay input[type="range"], .dialog-overlay input[type="checkbox"] { accent-color: var(--md-primary); }
 .dialog-overlay .position-setting { padding: var(--md-space-4); gap: var(--md-space-3); border-top: var(--md-border); }
 .dialog-overlay .position-grid { padding: var(--md-space-3); gap: var(--md-space-2); border: var(--md-border); background: var(--md-surface); }
-.dialog-overlay .position-grid button { height: 36px; border: 1px solid var(--md-outline); border-radius: var(--md-radius-small); background: var(--md-surface-lowest); }
+.dialog-overlay .position-grid button { height: 40px; border: 1px solid var(--md-outline); border-radius: var(--md-radius-small); color: var(--md-on-surface); background: var(--md-surface-lowest); }
 .dialog-overlay .position-grid button.active { border-color: var(--md-primary); background: var(--md-primary-container); box-shadow: none; }
-.dialog-overlay .position-grid button.active::after { content: "✓"; color: var(--md-on-primary-container); }
+.dialog-overlay .position-grid button.active::after { content: " ✓"; color: var(--md-on-primary-container); }
 .dialog-overlay .position-name { color: var(--md-on-surface-variant); font-size: var(--md-label); }
 .dialog-overlay .setting-button { min-width: 64px; height: 40px; padding-inline: var(--md-space-3); border: 1px solid var(--md-outline); border-radius: var(--md-radius-control); background: var(--md-surface-lowest); color: var(--md-primary); font-size: var(--md-body-medium); }
 .dialog-overlay .setting-button:hover { background: var(--md-primary-container); }
@@ -148,3 +152,4 @@ body.has-open-dialog { overflow: hidden; }
   .dialog-overlay .settings-dialog { padding: 0; }
   .dialog-overlay .settings-dialog .dialog-top, .dialog-overlay .settings-scroll { padding: 16px; }
 }
+.dialog-overlay .image-attachment.is-dragging :is(.image-drop-zone, .image-preview) { outline: var(--md-focus); outline-offset: -2px; }

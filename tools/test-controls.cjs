@@ -7,6 +7,20 @@ const source = fs.readFileSync(path.join(root,'frontend/time-controls.js'),'utf8
 const time = require('../frontend/time-controls.js');
 let checks = 0;
 function check(name,fn) { fn(); checks++; console.log('PASS '+name); }
+check('import rejects impossible Gregorian dates and non-timestamp values',()=>{
+ for(const value of ['2099-02-30T09:00:00+08:00','2099-02-29T09:00:00Z','1900-02-29T00:00:00Z','2100-02-29T00:00:00Z','2026-04-31T00:00:00Z','2026-06-31T00:00:00Z','2026-00-01T00:00:00Z','2026-13-01T00:00:00Z','2026-01-00T00:00:00Z','2026-01-01T24:00:00Z','2026-01-01T00:60:00Z','2026-01-01T00:00:60Z','2026-01-01T00:00:00+24:00','2026-01-01T00:00:00+08:60','2026-01-01','2026-01-01T09:00:00','02/30/2099','0000-01-01T00:00:00Z','',null,0,{}])assert.equal(time.parseImportedTimestamp(value).ok,false,JSON.stringify(value));
+});
+check('import keeps explicit offsets, fractional precision and small years',()=>{
+ for(const value of ['2000-02-29T09:00:00Z','2026-11-15T18:00:00+08:00','2026-11-15T12:30:00+05:30','2026-11-15T12:30:00-05:00','2026-01-01T00:30:00+14:00','0001-01-01T00:00:00Z','0099-06-01T00:00:00Z','9999-12-31T23:59:59.999Z','2026-11-15T12:00:00.123456789Z']) {const parsed=time.parseImportedTimestamp(value);assert.equal(parsed.ok,true,value);assert.equal(parsed.iso,new Date(value).toISOString());}
+ assert.equal(time.parseImportedTimestamp(' 2026-11-15T10:00:00Z ').iso,'2026-11-15T10:00:00.000Z');
+ assert.equal(time.parseImportedTimestamp('0001-01-01T00:00:00+14:00').ok,false);
+ assert.equal(time.parseImportedTimestamp('9999-12-31T23:59:59-01:00').ok,false);
+});
+check('native config covers dynamic popup labels without broadening other windows',()=>{
+ const capability=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/capabilities/default.json')));
+ assert(capability.windows.includes('main'));assert(capability.windows.includes('reminder-popup'));assert(capability.windows.includes('reminder-popup-*'));assert(!capability.windows.includes('*'));
+ const config=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/tauri.conf.json')));assert.equal(config.app.windows.find(w=>w.label==='main').dragDropEnabled,false);
+});
 check('month end clamps to leap day',()=>assert.deepEqual(time.shift([2024,1,31,12,30],1,1),[2024,2,29,12,30]));
 check('year clamps leap day',()=>assert.deepEqual(time.shift([2024,2,29,12,30],0,1),[2025,2,28,12,30]));
 check('day wraps month',()=>assert.deepEqual(time.shift([2026,3,1,12,0],2,-1),[2026,2,28,12,0]));
@@ -44,6 +58,14 @@ check('batch accepts optional priority while preserving date/time parse',()=>{
  const row=ctx.parseBatchLine('取快递 明天 19:00',1);assert.equal(row.priority,'');assert.equal(row.title,'取快递');
  assert.equal(ctx.parseBatchLine('坏日期 2099-02-30 19:00',1).status,'error');
 });
+check('position settings expose four labelled corners and smart/overlap choices only',()=>{
+ const html=fs.readFileSync(path.join(root,'frontend/index.html'),'utf8');
+ assert.deepEqual([...html.matchAll(/data-position="([^"]+)"/g)].map(m=>m[1]),['top-left','top-right','bottom-left','bottom-right']);
+ const choices=html.match(/<select id="popupOverflow"[\s\S]*?<\/select>/)[0];assert(choices.includes('value="smart"'));assert(choices.includes('value="overlap"'));
+ for(const name of ['左上','右上','左下','右下'])assert(html.includes('aria-label="'+name+'"'));
+ const rust=fs.readFileSync(path.join(root,'src-tauri/src/lib.rs'),'utf8');
+ const reflow=rust.slice(rust.indexOf('fn reflow_popup_group('),rust.indexOf('fn reflow_all_popups('));assert(!reflow.includes('set_size'));assert(reflow.includes('set_position'));
+});
 check('HTML keeps old control IDs and has no duplicate IDs',()=>{
  for(const page of ['index.html','popup.html']) {
   const html=fs.readFileSync(path.join(root,'frontend',page),'utf8');const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(ids).size,ids.length);
@@ -71,7 +93,7 @@ check('popup fits intrinsic content once, ignores height feedback and still foll
  const renderer=fs.readFileSync(path.join(root,'frontend/renderer.js'),'utf8');
  const chunk=renderer.slice(renderer.indexOf('function exportReminders('),renderer.indexOf('function render()'));
  const image='data:image/webp;base64,AAAA', payload={reminders:[{id:'existing',title:'不覆盖',dueAt:'2099-01-01T00:00:00Z'},{id:'new',title:'图片与紧急',dueAt:'2099-01-01T00:00:00Z',priority:'urgent',imageData:image},{id:'unknown',title:'未知等级',dueAt:'2099-01-01T00:00:00Z',priority:'other'},{id:'bad-date',title:'坏日期',dueAt:'invalid'}]};
- const blobs=[];const ctx={priorityNames:{urgent:'紧急',medium:'中等',normal:'一般'},state:{reminders:[{id:'existing',title:'原事项',dueAt:'2099-01-01T00:00:00Z'}],settings:{}},window:{confirm:()=>true},crypto:{randomUUID:()=> 'generated'},isSupportedImageData:value=>typeof value==='string'&&value.startsWith('data:image/webp;base64,'),saveBusy:false,persist:async()=>true,setTransferStatus:()=>{},Blob,URL:{createObjectURL:blob=>{blobs.push(blob);return 'blob:fixture';},revokeObjectURL(){}},document:{createElement:()=>({click(){}})},setTimeout(){},Date};
+ const blobs=[];const ctx={priorityNames:{urgent:'紧急',medium:'中等',normal:'一般'},state:{reminders:[{id:'existing',title:'原事项',dueAt:'2099-01-01T00:00:00Z'}],settings:{}},window:{confirm:()=>true,JishiTime:time},crypto:{randomUUID:()=> 'generated'},isSupportedImageData:value=>typeof value==='string'&&value.startsWith('data:image/webp;base64,'),saveBusy:false,persist:async()=>true,setTransferStatus:()=>{},Blob,URL:{createObjectURL:blob=>{blobs.push(blob);return 'blob:fixture';},revokeObjectURL(){}},document:{createElement:()=>({click(){}})},setTimeout(){},Date};
  vm.createContext(ctx);vm.runInContext(chunk,ctx);await ctx.importReminders({text:async()=>JSON.stringify(payload)});
  assert.equal(ctx.state.reminders.length,3);assert.equal(ctx.state.reminders[0].title,'原事项');assert.equal(ctx.state.reminders[1].priority,'urgent');assert.equal(ctx.state.reminders[1].imageData,image);assert.equal(ctx.state.reminders[2].priority,'');
  ctx.exportReminders();const exported=JSON.parse(await blobs[0].text());assert.equal(exported.reminders[1].priority,'urgent');assert.equal(exported.reminders[1].imageData,image);

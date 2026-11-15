@@ -1,5 +1,8 @@
 let reminder = null;
 let settings = { defaultSnooze: 10 };
+let stateEventRevision = 0;
+let latestPopupState = null;
+let popupEventRevision = 0;
 const $ = (selector) => document.querySelector(selector);
 function toLocalInput(date) { return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
 function applyTextSize(value) { document.body.dataset.textSize = String(Math.max(1, Math.min(5, Number(value) || 3))); }
@@ -13,7 +16,6 @@ function applyAppearance(value) {
 }
 function startPreviewCountdown(seconds) {
   ['completeButton', 'laterButton', 'editButton', 'collapseAllButton'].forEach((id) => { $(`#${id}`).disabled = true; });
-  $('.repeat-note').textContent = '外观预览，不会创建或修改提醒';
   $('#closeButton').setAttribute('aria-label', '关闭外观预览');
   $('#closeButton').title = '关闭外观预览';
   const duration = Math.max(1, Math.min(30, Number(seconds) || 5));
@@ -73,7 +75,15 @@ function render(item) {
   if (hasImage) image.addEventListener("load", fitPopup, { once: true });
   fitPopup();
 }
-$("#dragHandle").addEventListener("mousedown", (event) => { if (event.button === 0 && !event.target.closest("button")) window.jishi.startPopupDrag(); });
+$('#dragHandle').addEventListener('mousedown', event => {
+  if (event.button !== 0 || event.target.closest('button')) return;
+  window.jishi.raisePopup().catch(() => {});
+  const origin = [event.clientX,event.clientY];
+  const cancel = () => { window.removeEventListener('mousemove',move);window.removeEventListener('mouseup',cancel);window.removeEventListener('blur',cancel); };
+  const move = next => { if (!(next.buttons & 1)) { cancel();return; } if (Math.hypot(next.clientX-origin[0],next.clientY-origin[1]) >= 4) { cancel();window.jishi.startPopupDrag().catch(() => {}); } };
+  window.addEventListener('mousemove',move);window.addEventListener('mouseup',cancel);window.addEventListener('blur',cancel);
+});
+$('#dragHandle').addEventListener('keydown', event => { if (event.target === event.currentTarget && ['Enter',' '].includes(event.key)) { event.preventDefault();window.jishi.raisePopup().catch(() => {}); } });
 $("#closeButton").addEventListener("click", () => window.jishi.closePopup());
 $("#collapseAllButton").addEventListener("click", () => runPopupAction(() => window.jishi.collapseAllPopups()));
 let imageViewerOpener = null;
@@ -95,21 +105,24 @@ $("#reminderImageButton").addEventListener("click", () => {
 $("#imageViewerClose").addEventListener("click", closeImageViewer);
 $("#imageViewerOverlay").addEventListener("click", (event) => { if (event.target === event.currentTarget) closeImageViewer(); });
 $("#completeButton").addEventListener("click", () => runPopupAction(() => window.jishi.completeReminder(reminder.id)));
-$("#laterButton").addEventListener("click", () => { resetTomorrow(); $("#defaultButton").textContent = `默认 · ${settings.defaultSnooze} 分钟后`; $("#customTime").value = toLocalInput(new Date(Date.now() + settings.defaultSnooze * 60000)); $("#customTime").min = toLocalInput(new Date()); show("snoozePanel"); });
-$("#defaultButton").addEventListener("click", () => performSnooze(new Date(Date.now() + settings.defaultSnooze * 60000)));
+$("#laterButton").addEventListener("click", openSnooze);
+$("#defaultButton").addEventListener("click", () => performSnooze(new Date(Date.now() + displayedSnoozeMinutes * 60000)));
 $("#customButton").addEventListener("click", () => { if ($("#customTime").reportValidity() && $("#customTime").value) performSnooze(new Date($("#customTime").value)); });
 $("#disableButton").addEventListener("click", () => runPopupAction(() => window.jishi.disableReminder(reminder.id)));
 $("#snoozeBack").addEventListener("click", () => show("viewPanel"));
 $("#editButton").addEventListener("click", () => { $("#editTitle").value = reminder.title; $("#editNote").value = reminder.note || ""; $("#editPriority").value = reminder.priority || ""; $("#editPriorityField").classList.toggle("hidden", settings.priorityEnabled === false); show("editPanel"); });
 $("#editBack").addEventListener("click", () => show("viewPanel"));
 $("#saveEdit").addEventListener("click", async () => { if (popupBusy) return; const title = $("#editTitle").value.trim(); if (!title) return; const note = $("#editNote").value.trim(), priority = $("#editPriority").value; if (!await runPopupAction(() => window.jishi.updateFromPopup(reminder.id, title, note, priority))) return; reminder = { ...reminder, title, note, priority }; render(reminder); show("viewPanel"); });
-window.jishi.onPopupChanged((item) => { render(item); show("viewPanel"); });
-Promise.all([window.jishi.getPopupReminder(), window.jishi.loadState()]).then(([item, state]) => { settings = state.settings; applyAppearance(settings); $("#collapseAllButton").textContent = `全部收起 · ${settings.collapseMinutes || 10} 分钟`; render(item); if (item?.id?.startsWith("__preview__")) startPreviewCountdown(settings.previewSeconds); fitPopup(); });
 window.addEventListener('resize', fitPopupOnResize);
 document.addEventListener('keydown', event => { if(event.key === 'Escape' && !$("#imageViewerOverlay").classList.contains('hidden')) { event.preventDefault(); closeImageViewer(); return; } if(event.key === 'Escape' && !popupBusy && $("#viewPanel").classList.contains('hidden')) { event.preventDefault(); show('viewPanel'); } });
 
 let popupBusy = false;
-async function runPopupAction(action) {
+let snoozeReady = false;
+let snoozeSettingsValid = false;
+let tomorrowDirty = false;
+let customDirty = false;
+let displayedSnoozeMinutes = 10;
+async function runPopupAction(action, failureMessage = '未能确认操作成功，请重试。') {
   if (popupBusy || !reminder) return false;
   popupBusy = true;
   const focused = document.activeElement;
@@ -120,12 +133,13 @@ async function runPopupAction(action) {
   controls.forEach(([control]) => { control.disabled = true; });
   try { await action(); return true; }
   catch (_) {
-    error.textContent = '未能确认操作成功，请重试。';
+    error.textContent = failureMessage;
     error.classList.remove('hidden');
     return false;
   } finally {
     controls.forEach(([control, disabled]) => { control.disabled = disabled; });
     popupBusy = false;
+    if (snoozeReady && !$('#snoozePanel').classList.contains('hidden')) syncSnoozeDefaults();
     if (focused?.isConnected && !focused.disabled) focused.focus({ preventScroll: true });
     fitPopup();
   }
@@ -133,12 +147,76 @@ async function runPopupAction(action) {
 async function performSnooze(due) {
   if (popupBusy || !reminder) return;
   const error = $('#snoozeError'); error.textContent = '';
+  if (!snoozeSettingsValid) { error.textContent = '请返回后重新读取提醒设置'; return; }
   if (!Number.isFinite(due.getTime()) || due.getTime() <= Date.now()) { error.textContent = '请选择未来的提醒时间'; return; }
   await runPopupAction(() => window.jishi.snoozeReminder(reminder.id, due.toISOString()));
 }
 function updateTomorrowLabel() { $("#tomorrowButton").textContent = "明天 " + ($("#tomorrowTime").value || settings.tomorrowReminderTime || "09:00") + " 提醒"; fitPopup(); }
 function resetTomorrow() { $("#snoozeError").textContent = ""; $("#tomorrowTime").value = settings.tomorrowReminderTime || "09:00"; $("#tomorrowOptions").classList.add("hidden"); $("#adjustTomorrow").setAttribute("aria-expanded","false"); updateTomorrowLabel(); }
-$("#tomorrowTime").addEventListener("change", updateTomorrowLabel);
+function syncSnoozeDefaults() {
+  displayedSnoozeMinutes = settings.defaultSnooze || 10;
+  $('#defaultButton').textContent = `默认 · ${displayedSnoozeMinutes} 分钟后`;
+  if (!tomorrowDirty) $('#tomorrowTime').value = settings.tomorrowReminderTime || '09:00';
+  if (!customDirty) $('#customTime').value = toLocalInput(new Date(Date.now() + displayedSnoozeMinutes * 60000));
+  $('#customTime').min = toLocalInput(new Date());
+  updateTomorrowLabel();
+}
+async function openSnooze() {
+  if (popupBusy) return;
+  snoozeSettingsValid = false;
+  const loaded = await runPopupAction(async () => {
+    const revision = stateEventRevision;
+    const next = await window.jishi.loadState();
+    if (revision === stateEventRevision) syncPopupState(next);
+    if (!snoozeReady) resetTomorrow();
+    syncSnoozeDefaults();
+    snoozeSettingsValid = true;
+  }, '读取提醒设置失败，请重试。');
+  if (loaded) { snoozeReady = true; show('snoozePanel'); }
+}
+function syncReminder(item, force = false) {
+  if (!item) return;
+  const changed = !reminder || ['title', 'note', 'priority', 'imageData'].some(key => item[key] !== reminder[key]);
+  if (changed || force) render(item); else reminder = item;
+}
+function syncPopupState(next) {
+  latestPopupState = next;
+  const previous = settings;
+  settings = next.settings;
+  document.body.dataset.priorityPalette = settings.priorityPalette || '';
+  const label = `全部收起 · ${settings.collapseMinutes || 10} 分钟`;
+  if ($('#collapseAllButton').textContent !== label) { $('#collapseAllButton').textContent = label; fitPopup(); }
+  if (reminder) syncReminder(next.reminders.find(item => item.id === reminder.id) || reminder, previous.priorityEnabled !== settings.priorityEnabled);
+  if (snoozeReady && !popupBusy && !$('#snoozePanel').classList.contains('hidden') &&
+      (previous.defaultSnooze !== settings.defaultSnooze || previous.tomorrowReminderTime !== settings.tomorrowReminderTime)) syncSnoozeDefaults();
+}
+for (const name of ['input', 'change']) {
+  $('#tomorrowTime').addEventListener(name, () => { tomorrowDirty = true; updateTomorrowLabel(); });
+  $('#customTime').addEventListener(name, () => { customDirty = true; });
+}
 $("#adjustTomorrow").addEventListener("click", () => { const expanded = $("#tomorrowOptions").classList.toggle("hidden") === false; $("#adjustTomorrow").setAttribute("aria-expanded",String(expanded)); if(expanded) $("#tomorrowTime").focus(); fitPopup(); });
 $("#tomorrowButton").addEventListener("click", () => { if (!$("#tomorrowTime").reportValidity()) return; performSnooze(window.JishiTime.tomorrow(new Date(), $("#tomorrowTime").value)); });
-window.jishi.onStateChanged(state => { settings = state.settings; document.body.dataset.priorityPalette = settings.priorityPalette || ""; $("#collapseAllButton").textContent = `全部收起 · ${settings.collapseMinutes || 10} 分钟`; if(reminder) render(state.reminders.find(item=>item.id===reminder.id) || reminder); });
+async function initializePopup() {
+  const subscriptions = await Promise.allSettled([
+    window.jishi.onStateChanged(next => { stateEventRevision++; syncPopupState(next); }),
+    window.jishi.onPopupChanged(item => { popupEventRevision++; syncReminder(item); })
+  ]);
+  if (subscriptions.some(result => result.status === 'rejected')) {
+    console.error('popup event subscription failed', subscriptions.filter(result => result.status === 'rejected').map(result => String(result.reason)));
+    $('#popupError').textContent = '提醒更新监听失败，延后前将重新读取设置。';
+    $('#popupError').classList.remove('hidden');
+  }
+  try {
+    const [item, state] = await Promise.all([window.jishi.getPopupReminder(), window.jishi.loadState()]);
+    if (!stateEventRevision) syncPopupState(state);
+    applyAppearance(settings);
+    if (!popupEventRevision) syncReminder(latestPopupState?.reminders.find(entry => entry.id === item?.id) || item);
+    if (item?.id?.startsWith('__preview__')) startPreviewCountdown(settings.previewSeconds);
+    fitPopup();
+  } catch (_) {
+    $('#popupError').textContent = '读取提醒失败，请关闭后重试。';
+    $('#popupError').classList.remove('hidden');
+    fitPopup();
+  }
+}
+initializePopup();
