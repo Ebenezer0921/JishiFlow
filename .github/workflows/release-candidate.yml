@@ -1,0 +1,57 @@
+name: Windows candidate release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release-candidate.yml
+      - tools/publish-candidate.ps1
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Candidate tag matching Cargo version (for example v2.5.0-rc.1)
+        required: true
+        default: v2.5.0-rc.1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-candidate-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check frontend and regression tests
+        shell: pwsh
+        run: |
+          Get-ChildItem frontend/*.js | ForEach-Object {
+            node --check $_.FullName
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          node tools/test-controls.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node tools/test-save-safety.cjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Test and build Windows EXE
+        shell: pwsh
+        run: |
+          rustup default stable
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo build --release --locked --manifest-path src-tauri/Cargo.toml
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Package and publish prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || 'v2.5.0-rc.1' }}
+        run: ./tools/publish-candidate.ps1 -Tag $env:RELEASE_TAG

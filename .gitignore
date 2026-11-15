@@ -1,6 +1,7 @@
 /src-tauri/target/
 /src-tauri/gen/
 /src-tauri/.cargo/
+/release-output/
 *.log
 Thumbs.db
 .DS_Store
